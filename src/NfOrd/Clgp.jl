@@ -238,7 +238,7 @@ function _class_unit_group(O::NfOrd; bound::Int = -1, method::Int = 3, large::In
         @vtime_add_elapsed :UnitGroup 1 c :unit_time r = _unit_group_find_units(U, c)
       else
         @vtime_add_elapsed :UnitGroup 1 c :unit_hnf_time module_trafo_assure(c.M)
-        @vtime_add_elapsed :UnitGroup 1 c :unit_time r = _unit_group_find_units_with_trafo(U, c)
+        @vtime_add_elapsed :UnitGroup 1 c :unit_time r = _unit_group_find_units_with_transform(U, c)
       end
       @v_do :UnitGroup 1 popindent()
     end
@@ -403,7 +403,7 @@ end
 
 @doc Markdown.doc"""
     regulator(O::NfOrd)
-> Computes the regulator of $O$, ie. the discriminant of the unit lattice.    
+Computes the regulator of $O$, ie. the discriminant of the unit lattice.    
 """
 function regulator(O::NfOrd; method::Int = 3, unit_method::Int = 1, use_aut::Bool = false, GRH::Bool = true)
   c, U, b = _class_unit_group(O, method = method, unit_method = unit_method, use_aut = use_aut, GRH = GRH)
@@ -414,8 +414,8 @@ end
 
 @doc Markdown.doc"""
     regulator(K::AnticNumberField)
-> Computes the regulator of $K$, ie. the discriminant of the unit lattice 
-> for the maximal order of $K$
+Computes the regulator of $K$, ie. the discriminant of the unit lattice 
+for the maximal order of $K$
 """
 function regulator(K::AnticNumberField)
   return regulator(maximal_order(K))

@@ -29,7 +29,6 @@ mutable struct NfToNfMor <: Map{AnticNumberField, AnticNumberField, HeckeMap, Nf
     b = basis(K)
     for i = 1:degree(L)
       c = _image(b[i])
-
       for j = 1:degree(L)
         M[j, i] = coeff(c, j - 1)
       end
@@ -52,6 +51,57 @@ mutable struct NfToNfMor <: Map{AnticNumberField, AnticNumberField, HeckeMap, Nf
     z.header = MapHeader(K, L, _image, _preimage)
     return z
   end
+  
+  function NfToNfMor(K::AnticNumberField, L::AnticNumberField, y::nf_elem, y_inv::nf_elem)
+    z = new()
+    z.prim_img = y
+    z.prim_preimg = y_inv
+    
+    function _image(x::nf_elem)
+      g = parent(K.pol)(x)
+      return evaluate(g, y)
+    end
+
+    function _preimage(x::nf_elem)
+      g = parent(L.pol)(x)
+      return evaluate(g, y_inv)
+    end
+
+    z.header = MapHeader(K, L, _image, _preimage)
+    return z
+  end
+end
+
+
+function inv(f::NfToNfMor)
+  if degree(domain(f)) != degree(codomain(f))
+    error("The map is not invertible")
+  end
+  if isdefined(f, :prim_preimg)
+    return hom(codomain(f), domain(f), f.prim_preimg, check = false)
+  end
+  L = codomain(f)
+  K = domain(f)
+  M = zero_matrix(FlintQQ, degree(L), degree(L))
+  a = f.prim_img
+  el = one(L)
+  M[1, 1] = 1
+  for i = 2:degree(L)
+    mul!(el, el, a)
+    for j = 1:degree(L)
+      M[j, i] = coeff(el, j - 1)
+    end
+  end
+  t = zero_matrix(FlintQQ, degree(L), 1)
+  if degree(L) == 1
+    t[1, 1] = coeff(gen(L), 0)
+  else
+    t[2, 1] = fmpq(1) # coefficient vector of gen(L)
+  end
+
+  s = solve(M, t)
+  img = K(parent(K.pol)([ s[i, 1] for i = 1:degree(K) ]))
+  return hom(L, K, img, check = false)
 end
 
 function _compute_preimg(m::NfToNfMor)
@@ -82,6 +132,21 @@ function Base.:(==)(f::NfToNfMor, g::NfToNfMor)
 end
 
 #_D = Dict()
+
+function evaluate1(f::fmpq_poly, a::nf_elem)
+  R = parent(a)
+  if iszero(f)
+    return zero(R)
+  end
+  l = length(f) - 1
+  s = R(coeff(f, l))
+  for i in l-1:-1:0
+    #s = s*a + R(coeff(f, i))
+    mul!(s, s, a)
+    add!(s, s, R(coeff(f, i)))
+  end
+  return s
+end
 
 function *(f::NfToNfMor, g::NfToNfMor)
 #  global _D
@@ -182,7 +247,25 @@ function hom(K::AnticNumberField, L::AnticNumberField, a::nf_elem; check::Bool =
  return NfToNfMor(K, L, a, compute_inverse)
 end
 
+function hom(K::AnticNumberField, L::AnticNumberField, a::nf_elem, a_inv::nf_elem; check::Bool = true)
+ if check
+   if !iszero(evaluate(K.pol, a))
+     error("The data does not define a homomorphism")
+   end
+   if !iszero(evaluate(L.pol, a_inv))
+     error("The data does not define a homomorphism")
+   end
+ end
+ return NfToNfMor(K, L, a, a_inv)
+end
+
 
 id_hom(K::AnticNumberField) = hom(K, K, gen(K), check = false)
 
 morphism_type(::Type{AnticNumberField}) = NfToNfMor
+
+isinjective(m::NfToNfMor) = true
+
+issurjective(m::NfToNfMor) = (degree(domain(m)) == degree(codomain(m)))
+
+isbijective(m::NfToNfMor) = issurjective(m)
