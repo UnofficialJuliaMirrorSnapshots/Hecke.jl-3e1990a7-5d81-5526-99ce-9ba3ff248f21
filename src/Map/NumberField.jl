@@ -133,7 +133,7 @@ end
 
 #_D = Dict()
 
-function evaluate1(f::fmpq_poly, a::nf_elem)
+function evaluate(f::fmpq_poly, a::nf_elem)
   R = parent(a)
   if iszero(f)
     return zero(R)
@@ -143,6 +143,7 @@ function evaluate1(f::fmpq_poly, a::nf_elem)
   for i in l-1:-1:0
     #s = s*a + R(coeff(f, i))
     mul!(s, s, a)
+    # TODO (easy): Once fmpq_poly_add_fmpq is improved in flint, remove the R(..)
     add!(s, s, R(coeff(f, i)))
   end
   return s
@@ -218,18 +219,22 @@ function automorphisms(K::AnticNumberField; copy::Bool = true)
       rethrow(e)
     end
   end
-  f = K.pol
-  Kt, t = PolynomialRing(K, "t", cached = false)
-  f1 = change_ring(f, Kt)
-  divpol = Kt(nf_elem[-gen(K), K(1)])
-  f1 = divexact(f1, divpol)
-  lr = roots(f1, max_roots = div(degree(K), 2))
-  Aut1 = Vector{NfToNfMor}(undef, length(lr)+1)
-  for i = 1:length(lr)
-    Aut1[i] = hom(K, K, lr[i], check = false)
+  if degree(K) == 1
+    auts = NfToNfMor[hom(K, K, one(K))]
+  else
+    f = K.pol
+    Kt, t = PolynomialRing(K, "t", cached = false)
+    f1 = change_ring(f, Kt)
+    divpol = Kt(nf_elem[-gen(K), K(1)])
+    f1 = divexact(f1, divpol)
+    lr = roots(f1, max_roots = div(degree(K), 2))
+    Aut1 = Vector{NfToNfMor}(undef, length(lr)+1)
+    for i = 1:length(lr)
+      Aut1[i] = hom(K, K, lr[i], check = false)
+    end
+    Aut1[end] = id_hom(K)
+    auts = closure(Aut1, degree(K))
   end
-  Aut1[end] = id_hom(K)
-  auts = closure(Aut1, degree(K))
   _set_automorphisms_nf(K, auts)
   if copy
     return Base.copy(auts)
