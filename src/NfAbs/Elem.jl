@@ -42,6 +42,24 @@ end
 
 ################################################################################
 #
+#  Is integral
+#
+################################################################################
+
+isintegral(a::fmpq) = isone(denominator(a))
+
+function isintegral(a::Union{ nf_elem, NfAbsNSElem, NfRelElem, NfRel_nsElem })
+  f = minpoly(a)
+  for i = 0:(degree(f) - 1)
+    if !isintegral(coeff(f, i))
+      return false
+    end
+  end
+  return true
+end
+
+################################################################################
+#
 #  Random elements from arrays of nf_elem
 #
 ################################################################################
@@ -935,6 +953,12 @@ end
 #  Modular reduction
 #
 ################################################################################
+
+function __mod(a::nf_elem, b::fmpz, fl::Bool = true)
+  z = parent(a)()
+  ccall((:nf_elem_mod_fmpz_den, :libantic), Nothing, (Ref{nf_elem}, Ref{nf_elem}, Ref{fmpz}, Ref{AnticNumberField}, Cint), z, a, b, parent(a), Cint(fl))
+  return z
+end
 
 import Hecke.mod_sym!, Hecke.rem!, Hecke.mod!, Hecke.mod, Hecke.rem
 

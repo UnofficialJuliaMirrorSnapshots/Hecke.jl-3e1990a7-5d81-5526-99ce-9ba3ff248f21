@@ -235,9 +235,7 @@ function find_gens(K::KummerExt, S::PrimesSet, cp::fmpz=fmpz(1))
     end
   end
   return lp, sR
-  
 end
-
 
 ###############################################################################
 #
@@ -673,11 +671,12 @@ function _rcf_descent(CF::ClassField_pp)
         imF = Ap(xpe)^norm(p)
         res = GrpAbFinGenElem[]
         for (ky, v) in Auto
-          xp = zero(Ft)
-          @assert coeff(v, n) == 0
+          cfs = Vector{fq_nmod}(undef, n)
+          @assert iszero(coeff(v, n))
           for i = 0:n-1
-            setcoeff!(xp, i, image(mFp, coeff(v, i)))
+            cfs[i+1] = image(mFp, coeff(v, i))
           end
+          xp = Ft(cfs)
           kp = Ap(xp)
           if kp == imF
             push!(res, ky)
