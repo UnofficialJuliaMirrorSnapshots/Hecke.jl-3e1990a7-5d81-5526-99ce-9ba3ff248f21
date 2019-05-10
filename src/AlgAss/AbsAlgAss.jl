@@ -185,6 +185,7 @@ function decompose(A::AbsAlgAss{T}) where {T}
 end
 
 function _decompose(A::AbsAlgAss{T}) where {T}
+  @assert _issemisimple(A) != 2 "Algebra is not semisimple"
   if iscommutative(A)
     res = _dec_com(A)
   else
@@ -518,23 +519,27 @@ end
 
 # Reduces the vector v w. r. t. M and writes it in the i-th row of M.
 # M should look like this:
-#     (0 1 * * *)
-#     (1 * * * *)
+#     (0 1 * 0 *)
+#     (1 0 * 0 *)
 # M = (0 0 0 1 *)
 #     (0 0 0 0 0)
 #     (0 0 0 0 0),
 # i. e. "almost" in rref, but the rows do not have to be sorted.
-# For a column i of M pivot_rows[i] should be the row with the pivot or 0.
-# The function changes M, v, and pivot_rows in place!
+# For a column c of M pivot_rows[c] should be the row with the pivot or 0.
+# The function changes M, and pivot_rows in place!
 function _add_row_to_rref!(M::MatElem{T}, v::Vector{T}, pivot_rows::Vector{Int}, i::Int) where { T <: FieldElem }
   @assert ncols(M) == length(v)
   @assert ncols(M) == length(pivot_rows)
   @assert 1 <= i && i <= nrows(M)
 
-  rank_increases = false
-  new_pivot = 0
   for c = 1:ncols(M)
-    if iszero(v[c])
+    M[i, c] = deepcopy(v[c])
+  end
+
+  rank_increases = false
+  s = one(base_ring(M))
+  for c = 1:ncols(M)
+    if iszero(M[i, c])
       continue
     end
 
@@ -542,29 +547,42 @@ function _add_row_to_rref!(M::MatElem{T}, v::Vector{T}, pivot_rows::Vector{Int},
     if r == 0
       if !rank_increases
         pivot_rows[c] = i
-        new_pivot = c
         rank_increases = true
+        t = divexact(one(base_ring(M)), M[i, c])
+        for j = (c + 1):ncols(M)
+          M[i, j] = mul!(M[i, j], M[i, j], t)
+        end
+        M[i, c] = one(base_ring(M))
+
+        for j = 1:nrows(M)
+          if i == j
+            continue
+          end
+          if iszero(M[j, c])
+            continue
+          end
+
+          t = -M[j, c]
+          for k = (c + 1):ncols(M)
+            if iszero(M[i, k])
+              continue
+            end
+
+            s = mul!(s, t, M[i, k])
+            M[j, k] = add!(M[j, k], M[j, k], s)
+          end
+          M[j, c] = zero(base_ring(M))
+        end
       end
       continue
     end
 
-    p = M[r, c]
-    t = -divexact(v[c], p)
-    v[c] = zero(base_ring(M))
-
-    s = one(base_ring(M))
+    t = -M[i, c] # we assume M[r, c] == 1 (M[r, c] is the pivot)
     for j = (c + 1):ncols(M)
       s = mul!(s, t, M[r, j])
-      v[j] = add!(v[j], v[j], s)
+      M[i, j] = add!(M[i, j], M[i, j], s)
     end
-  end
-
-  if rank_increases
-    t = divexact(one(base_ring(M)), v[new_pivot])
-    for j = (new_pivot + 1):ncols(M)
-      M[i, j] = mul!(M[i, j], v[j], t)
-    end
-    M[i, new_pivot] = one(base_ring(M))
+    M[i, c] = zero(base_ring(M))
   end
 
   return rank_increases
@@ -614,7 +632,7 @@ function gens(A::AbsAlgAss, return_full_basis::Type{Val{T}} = Val{false}, thorou
         end
         new_gen = A[i]
         cur_basis_elt += 1
-        new_elt = _add_row_to_rref!(B, coeffs(new_gen), pivot_rows, cur_dim + 1)
+        new_elt = _add_row_to_rref!(B, coeffs(new_gen, copy = false), pivot_rows, cur_dim + 1)
         if new_elt
           break
         end
@@ -634,7 +652,7 @@ function gens(A::AbsAlgAss, return_full_basis::Type{Val{T}} = Val{false}, thorou
         cur_dim == d ? break : nothing
         b *= new_gen
         power += 1
-        new_elt = _add_row_to_rref!(B, coeffs(b), pivot_rows, cur_dim + 1)
+        new_elt = _add_row_to_rref!(B, coeffs(b, copy = false), pivot_rows, cur_dim + 1)
       end
       continue
     else
@@ -652,7 +670,7 @@ function gens(A::AbsAlgAss, return_full_basis::Type{Val{T}} = Val{false}, thorou
         else
           t = s
         end
-        new_elt = _add_row_to_rref!(B, coeffs(t), pivot_rows, cur_dim + 1)
+        new_elt = _add_row_to_rref!(B, coeffs(t, copy = false), pivot_rows, cur_dim + 1)
         if !new_elt
           continue
         end
@@ -781,7 +799,7 @@ the basis elements of A and a map from B to A.
 """
 function regular_matrix_algebra(A::Union{ AlgAss, AlgGrp })
   K = base_ring(A)
-  B = AlgMat(K, [ representation_matrix(A[i], :right) for i = 1:dim(A) ], isbasis = true, check = false)
+  B = matrix_algebra(K, [ representation_matrix(A[i], :right) for i = 1:dim(A) ], isbasis = true, check = false)
   return B, hom(B, A, identity_matrix(K, dim(A)), identity_matrix(K, dim(A)))
 end
 
