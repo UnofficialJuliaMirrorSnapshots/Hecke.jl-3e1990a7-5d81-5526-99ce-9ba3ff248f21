@@ -12,7 +12,8 @@ import AbstractAlgebra: base_ring, parent, check_parent, isunit, inv, +, -, *,
       Base.iszero, Base.isone, Base.==, Base.gcd, Base.deepcopy_internal,
       needs_parentheses, Base.show, displayed_with_minus_in_front, show_minus_one,
       Base.^, data, Base.numerator, Base.denominator, canonical_unit, Base.gcdx,
-      Base.div, divides, Base.lcm, Base.rand, Nemo.prime
+      Base.div, divides, Base.lcm, Base.rand
+import Nemo: prime
 
 #prime might be product of several primes if localized at several primes, those primes are in array primes
 mutable struct Loc{T} <: AbstractAlgebra.Ring
@@ -42,6 +43,7 @@ mutable struct Loc{T} <: AbstractAlgebra.Ring
        r = new()
        r.base_ring = parent(prime)
        r.prime = prime
+       r.comp = comp
        if cached
           LocDict[parent(prime), prime, comp] = r
        end
@@ -56,7 +58,7 @@ const LocDict = Dict{Tuple{AbstractAlgebra.Ring, RingElement, Bool}, AbstractAlg
 function isin(a, L::Loc{T}) where {T <: RingElem}
   iszero(a) && return true
   L.comp || (!isone(gcd(denominator(a), prime(L))) && return false)
-  L.comp && ppio(denominator(a), prime(L))[1] != denominator(data) && return false
+  L.comp && ppio(denominator(a), prime(L))[1] != denominator(a.data) && return false
   return true
 end
 
