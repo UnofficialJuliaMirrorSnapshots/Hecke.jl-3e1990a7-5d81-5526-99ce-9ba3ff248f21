@@ -79,6 +79,8 @@ Returns the ambient number field of $\mathcal O$.
 """
 @inline nf(O::NfAbsOrd) = O.nf
 
+_algebra(O::NfAbsOrd) = nf(O)
+
 @doc Markdown.doc"""
   number_field(O::NfAbsOrd)
 
@@ -128,7 +130,7 @@ function ismaximal(R::NfAbsOrd)
   end
   return R.ismaximal == 1
 end
- 
+
 function contains_equation_order(O::NfAbsOrd)
   if isdefined(O, :index)
     return true
@@ -138,6 +140,8 @@ function contains_equation_order(O::NfAbsOrd)
   end
   return isinteger(gen_index(O))
 end
+
+iscommutative(O::NfAbsOrd) = true
 
 ################################################################################
 #
@@ -1129,7 +1133,6 @@ function sum_as_Z_modules(O1::NfAbsOrd, O2::NfAbsOrd, z::fmpz_mat = zero_matrix(
   if isdefined(O1, :index) && isdefined(O2, :index)
     O.index = lcm(index(O1), index(O2))
   end
-  
   return O
 end
 
