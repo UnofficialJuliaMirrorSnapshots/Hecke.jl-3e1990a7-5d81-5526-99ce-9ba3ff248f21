@@ -247,8 +247,8 @@ function new_maximal_order(O::NfOrd; index_divisors::Vector{fmpz} = fmpz[], disc
     @vprint :NfOrd 1 "I have to factor $Q\n "
     for el in Q
       d = factor(el).fac
-      O1 = pmaximal_overorder_at(O, collect(keys(d)))
-      OO = sum_as_Z_modules(OO, O1, auxmat)
+      O2 = pmaximal_overorder_at(O, collect(keys(d)))
+      O1 = sum_as_Z_modules(O1, O2, auxmat)
     end
   end
   O1.ismaximal = 1
