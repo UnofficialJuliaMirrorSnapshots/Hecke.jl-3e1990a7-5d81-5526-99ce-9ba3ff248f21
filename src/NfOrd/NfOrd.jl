@@ -1365,7 +1365,7 @@ function discriminant(m::T, R::NfOrd) where T <: Map
 end
 
 @doc Markdown.doc"""
-    codifferent(R::NfOrd) -> NfOrdIdeal
+    codifferent(R::NfOrd) -> NfOrdIdl
 The codiffernt ideal of $R$, ie. the trace-dual of $R$.
 """
 function codifferent(R::NfOrd)
