@@ -44,7 +44,7 @@ import Base: show, minimum, rand, prod, copy, rand, ceil, round, size, in,
              setindex!, transpose, getindex, //, div, floor, max, BigFloat,
              precision, first, StepRange, show, one, zero, inv, iseven, isodd,
              convert, angle, abs2, isless, exponent, isfinite, zeros, rem, min,
-             numerator, denominator, exp, maximum, intersect
+             numerator, denominator, exp, maximum, intersect, reduce
 
 # To make all exported Nemo functions visible to someone using "using Hecke"
 # we have to export everything again
@@ -90,7 +90,7 @@ export @vprint, @hassert, @vtime, add_verbose_scope, get_verbose_level,
 ###############################################################################
 
 const pkgdir = joinpath(dirname(pathof(Hecke)), "..")
-#
+
 #const libhecke = joinpath(pkgdir, "local", "lib", "libhecke")
 #
 #const libdir = joinpath(pkgdir, "local", "lib")
@@ -216,6 +216,10 @@ function __init__()
 
   global _get_automorphisms_nf_rel = t[1]
   global _set_automorphisms_nf_rel = t[2]
+
+  t = Hecke.create_accessors(AnticNumberField, Dict{Int, Tuple{qAdicRootCtx, Dict{nf_elem, Any}}}, get_handle())
+  global _get_nf_conjugate_data_qAdic = t[1]
+  global _set_nf_conjugate_data_qAdic = t[2]
 
 
   global R = _RealRing()
@@ -343,7 +347,7 @@ Base.adjoint(x) = transpose(x)
 #
 ################################################################################
 
-global VERSION_NUMBER = v"0.6.4"
+global VERSION_NUMBER = v"0.6.5"
 
 ################################################################################
 #
@@ -730,6 +734,7 @@ include("ModAlgAss.jl")
 include("AlgAss.jl")
 include("AlgAssAbsOrd.jl")
 include("AlgAssRelOrd.jl")
+include("LocalField.jl")
 
 ################################################################################
 #
@@ -817,6 +822,11 @@ export example
 
 function example(s::String)
   Base.include(Main, joinpath(dirname(pathof(Hecke)), "..", "examples", s))
+end
+
+function revise(s::String)
+  s = joinpath(dirname(pathof(Hecke)), "..", "examples", s)
+  Main.Revise.track(Main, s)
 end
 
 #same (copyed) as in stdlib/v1.0/InteractiveUtils/src/InteractiveUtils.jl
