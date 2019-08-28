@@ -28,3 +28,5 @@ end
 @time include("RCF.jl")
 @time include("Examples.jl")
 @time include("Sparse.jl")
+@time include("QuadForm.jl")
+@time include("LocalField.jl")
