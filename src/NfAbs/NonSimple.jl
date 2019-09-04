@@ -171,7 +171,7 @@ end
 #
 ################################################################################
 
-function basis_mat(A::Array{NfAbsNSElem})
+function basis_matrix(A::Array{NfAbsNSElem})
   @assert length(A) > 0
   n = length(A)
   d = degree(parent(A[1]))
@@ -183,8 +183,8 @@ function basis_mat(A::Array{NfAbsNSElem})
   return MM
 end
 
-function basis_mat(A::Vector{NfAbsNSElem}, ::Type{FakeFmpqMat})
-  return FakeFmpqMat(basis_mat(A))
+function basis_matrix(A::Vector{NfAbsNSElem}, ::Type{FakeFmpqMat})
+  return FakeFmpqMat(basis_matrix(A))
 end
 
 ################################################################################
@@ -773,11 +773,7 @@ end
 #  Simple extensions
 #
 ################################################################################
-@doc Markdown.doc"""
-    simple_extension(K::NfAbsNS) -> AnticNumberField, Map
-For a non-simple extension $K$ of $Q$, find a primitive element and thus
-an isomorphic simple extension of $Q$. The map realises this isomorphism.
-"""
+
 function simple_extension(K::NfAbsNS; check = true)
   n = ngens(K)
   g = gens(K)
@@ -835,34 +831,9 @@ function simple_extension(K::NfAbsNS; check = true)
   return Ka, NfAbsToNfAbsNS(Ka, K, pe, emb)
 end
 
-################################################################################
-#
-#  Composite of linearly disjoint fields
-#
-################################################################################
-
-function islinearly_disjoint(K1::AnticNumberField, K2::AnticNumberField)
-  if gcd(degree(K1), degree(K2)) == 1
-    return true
-  end
-  d1 = numerator(discriminant(K1.pol))
-  d2 = numerator(discriminant(K2.pol))
-  if gcd(d1, d2) == 1
-    return true
-  end
-  f = change_base_ring(K1.pol, K2)
-  return isirreducible(f)
-end
-
-
 function NumberField(K1::AnticNumberField, K2::AnticNumberField; cached::Bool = false, check::Bool = false)
-
-  if check
-    #I have to check that the fields are linearly disjoint
-    @assert islinearly_disjoint(K1, K2)
-  end
   
-  K , l= number_field([K1.pol, K2.pol], "_\$")
+  K , l = number_field([K1.pol, K2.pol], "_\$", check = check, cached = cached)
   mp1 = NfAbsToNfAbsNS(K1, K, l[1])
   mp2 = NfAbsToNfAbsNS(K2, K, l[2])
   return K, mp1, mp2
@@ -882,7 +853,7 @@ we construct
  $$K = Q[t_1, \ldots, t_n]/\langle f_1(t_1), \ldots, f_n(t_n)\rangle$$
 The ideal bust be maximal, however, this is not tested.
 """
-function NumberField(f::Array{fmpq_poly, 1}, s::String="_\$"; cached::Bool = false, check::Bool = false)
+function NumberField(f::Array{fmpq_poly, 1}, s::String="_\$"; cached::Bool = false, check::Bool = true)
   S = Symbol(s)
   n = length(f)
   Qx, x = PolynomialRing(FlintQQ, n, s)
@@ -890,10 +861,15 @@ function NumberField(f::Array{fmpq_poly, 1}, s::String="_\$"; cached::Bool = fal
               Symbol[Symbol("$s$i") for i=1:n], cached)
   K.degrees = [degree(f[i]) for i in 1:n]
   K.degree = prod(K.degrees)
+  if check
+    if !check_consistency(K)
+      error("The fields are not linearly disjoint!")
+    end
+  end
   return K, gens(K)
 end
 
-function NumberField(f::Array{fmpz_poly, 1}, s::String="_\$"; cached::Bool = false, check::Bool = false)
+function NumberField(f::Array{fmpz_poly, 1}, s::String="_\$"; cached::Bool = false, check::Bool = true)
   S = Symbol(s)
   n = length(f)
   Qx, x = PolynomialRing(FlintQQ, n, s)
@@ -901,6 +877,11 @@ function NumberField(f::Array{fmpz_poly, 1}, s::String="_\$"; cached::Bool = fal
               Symbol[Symbol("$s$i") for i=1:n], cached)
   K.degrees = [degree(f[i]) for i in 1:n]
   K.degree = prod(K.degrees)
+  if check
+    if !check_consistency(K)
+      error("The fields are not linearly disjoint!")
+    end
+  end
   return K, gens(K)
 end
 
@@ -928,20 +909,6 @@ function (K::NfAbsNS)(a::NfAbsNSElem)
     return deepcopy(a)
   end
   error("not compatible")
-end
-
-@doc Markdown.doc"""
-    norm(f::PolyElem{NfAbsNSElem}) -> fmpq_poly
-
->The norm of $f$, that is, the product of all conjugates of $f$ taken
->coefficientwise.
-"""
-function norm(f::PolyElem{NfAbsNSElem})
-  Kx = parent(f)
-  K = base_ring(f)
-  P = polynomial_to_power_sums(f, degree(f)*degree(K))
-  PQ = fmpq[tr(x) for x in P]
-  return power_sums_to_polynomial(PQ)
 end
 
 function trace_assure(K::NfAbsNS)
@@ -1107,14 +1074,11 @@ function factor(f::PolyElem{NfAbsNSElem})
     g = compose(f, gen(Kx) - k*pe)
     @vtime :PolyFactor 2 N = norm(g)
   end
-  @show "factor"
   @vtime :PolyFactor 2 fac = factor(N)
-  @show "done"
   
   res = Dict{PolyElem{NfAbsNSElem}, Int64}()
 
   for i in keys(fac.fac)
-    @show i
     t = change_ring(i, Kx)
     t = compose(t, gen(Kx) + k*pe)
     @vtime :PolyFactor 2 t = gcd(f, t)

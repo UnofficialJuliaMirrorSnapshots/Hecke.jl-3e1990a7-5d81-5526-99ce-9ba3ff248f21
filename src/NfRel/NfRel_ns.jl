@@ -186,18 +186,17 @@ end
 #  Constructors and parent object overloading
 #
 ################################################################################
-@doc Markdown.doc"""
-    number_field(f::Array{Generic.Poly{T}, 1}, s::String="_\$") where T -> NfRel_ns
 
-Given polynomials $f = (f_1, \ldots, f_n)$ over some number field $k$, construct
-$K = k[t_1, \ldots, t_n]/\langle f_1(t_1), \ldots, f_n(t_n)\rangle$
-The ideal in the quotient must be maximal - although this is not tested.
-"""
-function Nemo.NumberField(f::Array{Generic.Poly{T}, 1}, s::String="_\$"; cached::Bool = false, check::Bool = false) where T
+function Nemo.NumberField(f::Array{Generic.Poly{T}, 1}, s::String="_\$"; cached::Bool = false, check::Bool = true) where T
   S = Symbol(s)
   R = base_ring(f[1])
   Rx, x = PolynomialRing(R, length(f), s)
   K = NfRel_ns(f, [f[i](x[i]) for i=1:length(f)], [Symbol("$s$i") for i=1:length(f)])
+  if check
+    if !check_consistency(K)
+      error("The fields are not linearly disjoint!")
+    end
+  end
   return K, gens(K)
 end
 
@@ -384,7 +383,7 @@ function basis(K::NfRel_ns)
   return b
 end
 
-function basis_mat(a::Vector{NfRel_nsElem{T}}) where {T <: NumFieldElem}
+function basis_matrix(a::Vector{NfRel_nsElem{T}}) where {T <: NumFieldElem}
   @assert length(a) > 0
   K = parent(a[1])
   M = zero_matrix(base_field(K), length(a), degree(K))
@@ -778,15 +777,6 @@ function msubst(f::Generic.MPoly{T}, v::Array{NfRel_nsElem{T}, 1}) where T
   return r
 end
 
-
-#find isomorphic simple field AND the map
-@doc Markdown.doc"""
-    simple_extension(K::NfRel_ns{nf_elem}) -> NfRel, Map
-
-Compute a simple field L as an extension of the base field of K and an isomorphism
-between L and K 
-
-"""
 function simple_extension(K::NfRel_ns{T}) where {T}
   n = ngens(K)
   g = gens(K)

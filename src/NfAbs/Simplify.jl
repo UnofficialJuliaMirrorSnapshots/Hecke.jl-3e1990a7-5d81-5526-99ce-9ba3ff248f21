@@ -16,9 +16,6 @@ function simplify(K::AnticNumberField; canonical::Bool = false, cached = false)
     a, f1 = polredabs(K)
     f = Qx(f1)
   else
-    Zx = PolynomialRing(FlintZZ, "x", cached = false)[1]
-    f = Zx(K.pol)
-    p, d = _find_prime(f)
     OK = maximal_order(K)
     if isdefined(OK, :lllO)
       ZK = OK.lllO
@@ -26,42 +23,53 @@ function simplify(K::AnticNumberField; canonical::Bool = false, cached = false)
       prec = 100 + 25*div(degree(K), 3) + Int(round(log(abs(discriminant(K)))))
       ZK = _lll_for_simplify(OK, prec = prec)[2]
     end
-    a = gen(K)
-
-    B = basis(ZK, copy = false)
-    #First, we search for elements that are primitive using block systems
-    F = FlintFiniteField(p, d, "w", cached = false)[1]
-    Ft = PolynomialRing(F, "t", cached = false)[1]
-    ap = zero(Ft)
-    fit!(ap, degree(K)+1)
-    rt = roots(f, F)
-  
-    n = degree(K)
-    indices = Int[]
-    for i = 1:length(B)
-      b = _block(B[i].elem_in_nf, rt, ap)
-      if length(b) == n
-        push!(indices, i)
-      end
-    end
-    #Now, we select the one of smallest T2 norm
-    I = t2(a)    
-    for i = 1:length(indices)
-      if isone(denominator(B[indices[i]].elem_in_nf))
-        continue
-      end 
-      t2n = t2(B[indices[i]].elem_in_nf)
-      if t2n < I
-        a = B[indices[i]].elem_in_nf
-        I = t2n
-      end
-    end
-    f = minpoly(Qx, a)
+    a, f = _simplify(ZK)
   end
   L = NumberField(f, cached = cached, check = false)[1]
   m = hom(L, K, a, check = false)
   return L, m
 end
+
+function _simplify(O::NfOrd)
+  K = nf(O)
+  Qx, x = PolynomialRing(FlintQQ)
+  Zx = PolynomialRing(FlintZZ, "x", cached = false)[1]
+  f = Zx(K.pol)
+  
+  a = gen(K)
+  p, d = _find_prime(f)
+
+  B = basis(O, copy = false)
+  #First, we search for elements that are primitive using block systems
+  F = FlintFiniteField(p, d, "w", cached = false)[1]
+  Ft = PolynomialRing(F, "t", cached = false)[1]
+  ap = zero(Ft)
+  fit!(ap, degree(K)+1)
+  rt = roots(f, F)
+  
+  n = degree(K)
+  indices = Int[]
+  for i = 1:length(B)
+    b = _block(B[i].elem_in_nf, rt, ap)
+    if length(b) == n
+      push!(indices, i)
+    end
+  end
+  #Now, we select the one of smallest T2 norm
+  I = t2(a)    
+  for i = 1:length(indices)
+    if isone(denominator(B[indices[i]].elem_in_nf))
+      continue
+    end 
+    t2n = t2(B[indices[i]].elem_in_nf)
+    if t2n < I
+      a = B[indices[i]].elem_in_nf
+      I = t2n
+    end
+  end
+  return a, minpoly(Qx, a)
+end
+
 
 function _index_via_discriminant(a::NfOrdElem)
   O = parent(a)
@@ -93,7 +101,7 @@ function _index(a::NfOrdElem)
   for i = 3:d
     pows[i] = pows[i-1]*a.elem_in_nf
   end
-  M = basis_mat(pows)
+  M = basis_matrix(pows)
   hnf!(M)
   res = prod(M[i, i] for i = 1:degree(K)) 
   return numerator(res*index(O))
@@ -363,7 +371,7 @@ function _lll_for_simplify(M::NfOrd; prec = 100)
     #in this case the gram-matrix of the minkowski lattice is the trace-matrix
     #which is exact. 
     BM = _lll_gram(ideal(M, 1))[2]
-    O1 = NfOrd(K, BM*basis_mat(M, copy = false))
+    O1 = NfOrd(K, BM*basis_matrix(M, copy = false))
     O1.ismaximal = M.ismaximal
     if isdefined(M, :index)
       O1.index = M.index
@@ -383,7 +391,7 @@ function _lll_for_simplify(M::NfOrd; prec = 100)
     #trace-matrix which is exact.
     #could be extended to CM-fields
     BM = _lll_quad(ideal(M, 1))[2]
-    O1 = NfOrd(K, BM*basis_mat(M, copy = false))
+    O1 = NfOrd(K, BM*basis_matrix(M, copy = false))
     O1.ismaximal = M.ismaximal
     if isdefined(M, :index)
       O1.index = M.index
@@ -448,7 +456,7 @@ function _lll_for_simplify(M::NfOrd; prec = 100)
       end
     end
   end
-  On = NfOrd(K, g*basis_mat(M, copy = false))
+  On = NfOrd(K, g*basis_matrix(M, copy = false))
   On.ismaximal = M.ismaximal
   if isdefined(M, :index)
     On.index = M.index

@@ -237,7 +237,7 @@ function factor_new(f::PolyElem{nf_elem})
     F, mF = ResidueField(zk, P[1][1])
     mF = extend(mF, k)
     fp = change_base_ring(f, mF)
-    if degree(fp) < degree(f)
+    if degree(fp) < degree(f) || iszero(trailing_coefficient(fp)) || iszero(trailing_coefficient(fp))
       continue
     end
     lf = factor(fp)
@@ -252,7 +252,6 @@ function factor_new(f::PolyElem{nf_elem})
     end
 
     if length(s) == 1
-      println("irreducible by degset")
       return [f]
     end
 
@@ -372,8 +371,11 @@ function cld_data(H::Hensel, up_to::Int, from::Int, mC, Mi, sc::nf_elem)
 #  @assert up_to <= from
 
   M = zero_matrix(FlintZZ, length(lf), (1+up_to + N - from) * degree(k))
+  global last_lf = (lf, H.f, up_to)
 
-  lf = [divexact_low(mullow(derivative(x), H.f, up_to), x, up_to) for x = lf]
+  lf = [divexact_low(mullow(derivative(x), H.f, up_to+1), x, up_to+1) for x = lf]
+#  lf = [divexact(derivative(x)*H.f, x) for x = lf]
+#  @show llf .- lf
 
   NN = zero_matrix(FlintZZ, 1, degree(k))
   d = FlintZZ()
@@ -423,10 +425,10 @@ end
 function grow_prec!(vH::vanHoeijCtx, pr::Int)
   lift(vH.H, pr)
 
-  vH.Ml = lll(basis_mat(vH.P^pr))
+  vH.Ml = lll(basis_matrix(vH.P^pr))
   pMr = pseudo_inv(vH.Ml)
   F = FakeFmpqMat(pMr)
-  #M * basis_mat(zk) is the basis wrt to the field
+  #M * basis_matrix(zk) is the basis wrt to the field
   #(M*B)^-1 = B^-1 * M^-1, so I need basis_mat_inv(zk) * pM
   vH.pMr = (F.num, F.den, fmpz_preinvn_struct(2*F.den))
   F = basis_mat_inv(order(vH.P)) * F
@@ -601,7 +603,7 @@ function van_hoeij(f::PolyElem{nf_elem}, P::NfOrdIdl; prec_scale = 20)
       mod_sym!(B, vH.pM[2]*fmpz(2)^prec_scale)
 #      @show maximum(nbits, B), nbits(vH.pM[2]), b[i]
       if sz + prec_scale >= nbits(vH.pM[2]) || sz < 0
-        println("loss of precision for this col: ", sz, " ", nbits(pM[2]))
+        println("Loss of precision for this col: ", sz, " ", nbits(pM[2]))
         error()
         continue
       else
@@ -616,7 +618,6 @@ function van_hoeij(f::PolyElem{nf_elem}, P::NfOrdIdl; prec_scale = 20)
   #    @show map(nbits, Array(M))
 #      @show maximum(nbits, Array(M)), size(M)
       @vtime :PolyFactor 1 l, M = lll_with_removal(M, r*fmpz(2)^(2*prec_scale) + div(r+1, 2)*N*degree(K))
-#      @show l, i# , map(nbits, Array(M))
   #    @show hnf(sub(M, 1:l, 1:r))
       @hassert :PolyFactor 1 !iszero(sub(M, 1:l, 1:r))
       M = sub(M, 1:l, 1:ncols(M))
@@ -693,6 +694,9 @@ function van_hoeij(f::PolyElem{nf_elem}, P::NfOrdIdl; prec_scale = 20)
     have = vcat(0:up_to-1, from:N-2)  #N-1 is always 1
     if length(have) <= length(really_used)
       @show have, really_used, used
+      @show f
+      @show base_ring(f)
+      global last_f = (f, P, vH)
       error("too bad")
     end
     used = deepcopy(really_used)

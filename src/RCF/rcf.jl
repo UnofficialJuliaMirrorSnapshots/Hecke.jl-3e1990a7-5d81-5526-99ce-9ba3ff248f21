@@ -31,6 +31,7 @@ quotient of the domain of $m$ and a subgroup of $m$, create the
 is canonically isomorphic to the codomain of $q$.
 """
 function ray_class_field(m::S, quomap::T) where {S <: Union{MapClassGrp, MapRayClassGrp}, T}
+  domain(quomap) == domain(m) || error("1st map must be a (ray)class group map, and the 2nd must be a projection of the domain of the 1st")
   CF = ClassField{S, T}()
   CF.rayclassgroupmap = m
   D = codomain(quomap)
@@ -99,7 +100,7 @@ function NumberField(CF::ClassField{S, T}; redo::Bool = false) where {S, T}
     q[i] = G[i]
   end
   CF.cyc = res
-  CF.A = number_field([x.A.pol for x = CF.cyc])[1]
+  CF.A = number_field([x.A.pol for x = CF.cyc], check = false)[1]
   return CF.A
 end
 
@@ -260,7 +261,7 @@ function find_gens_descent(mR::Map, A::ClassField_pp, cp::fmpz)
         f = R[1]
         for (P, e) = lP
           lpp = prime_decomposition(C.mp[2], P)
-          if divexact(splitting_type(lpp[1][1])[2], splitting_type(P)[2]) != U.snf[i]
+          if divexact(degree(lpp[1][1]), degree(P)) != U.snf[i]
             continue
           end
           try
@@ -354,8 +355,12 @@ function find_gens(K::KummerExt, S::PrimesSet, cp::fmpz=fmpz(1))
   s, ms = snf(q)
   ind = 1
   
-  ctx = _get_ClassGrpCtx_of_order(ZK)
-  fb = ctx.FB.ideals
+  ctx = _get_ClassGrpCtx_of_order(ZK, false)
+  if ctx == nothing
+    fb = elem_type(IdealSet(ZK))[]
+  else
+    fb = ctx.FB.ideals
+  end
   
   for P in fb
     p = minimum(P)
@@ -1160,7 +1165,7 @@ function _rcf_reduce(CF::ClassField_pp)
   else
     CF.a = reduce_mod_powers(CF.a, e)
   end
-  CF.K = pure_extension(CF.o, CF.a)[1]
+  CF.K = radical_extension(CF.o, CF.a)[1]
   return nothing
 end
 

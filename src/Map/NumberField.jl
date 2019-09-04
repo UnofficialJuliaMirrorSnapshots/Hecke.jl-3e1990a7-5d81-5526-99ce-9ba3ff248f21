@@ -544,3 +544,44 @@ function generic_group(G::Vector{NfToNfMor}, ::typeof(*))
   GtoGen = Dict{eltype(G), GrpGenElem}(G[i] => Gen[i] for i in 1:length(G))
   return Gen, GtoGen, GentoG
 end
+
+################################################################################
+#
+#  Induced image
+#
+################################################################################
+
+# For Carlo:
+(f::NfToNfMor)(x::NfOrdIdl) = induce_image(f, x)
+
+function induce_image(f::NfToNfMor, x::NfOrdIdl)
+  domain(f) !== codomain(f) && throw(error("Map must be an automorphism"))
+  OK = order(x)
+  K = nf(OK)
+  I = ideal(OK)
+  if isdefined(x, :gen_two)
+    I.gen_two = OK(f(K(x.gen_two)))
+  end
+  if isdefined(x, :princ_gen)
+    I.princ_gen = OK(f(K(x.princ_gen)))
+  end
+  for i in [:gen_one, :is_prime, :gens_normal, :gens_weakly_normal, :is_principal, 
+          :iszero, :minimum, :norm, :splitting_type]
+    if isdefined(x, i)
+      setfield!(I, i, getfield(x, i))
+    end
+  end
+  if !has_2_elem(I)
+    #I need to translate the basis matrix
+    I.basis = map(x -> OK(f(K(x))), basis(x, copy = false))
+    M = zero_matrix(FlintZZ, degree(K), degree(K))
+    for i = 1:degree(K)
+      el = coordinates(I.basis[i])
+      for j = 1:degree(K)
+        M[i, j] = el[j]
+      end
+    end
+    I.basis_matrix = M
+  end
+  return I
+end

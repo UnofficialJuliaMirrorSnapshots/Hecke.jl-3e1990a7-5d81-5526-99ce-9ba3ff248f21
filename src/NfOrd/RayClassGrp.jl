@@ -973,7 +973,7 @@ function probabilistic_coprime(a::NfOrdIdl, m::NfOrdIdl)
   O = order(a)
   K = nf(O)
   J = inv(a)
-  temp = basis_mat(J.num, copy = false)*basis_mat(O, copy = false)
+  temp = basis_matrix(J.num, copy = false)*basis_matrix(O, copy = false)
   b = temp.num
   b_den = temp.den
   prec = 100
@@ -1974,8 +1974,12 @@ function find_gens(mR::MapRayClassGrp; coprime_to::fmpz = fmpz(-1))
   end
   
   
-  ctx = _get_ClassGrpCtx_of_order(O)
-  fb = ctx.FB.ideals
+  ctx = _get_ClassGrpCtx_of_order(O, false)
+  if ctx == nothing
+    fb = elem_type(IdealSet(O))[]
+  else
+    fb = ctx.FB.ideals
+  end
   l = length(fb)
   
   q, mq = quo(R, sR, false)
@@ -2005,7 +2009,11 @@ function find_gens(mR::MapRayClassGrp; coprime_to::fmpz = fmpz(-1))
   end
   
   if order(q) != 1
-    p1 = minimum(fb[1])
+    if length(fb) > 0
+      p1 = minimum(fb[1])
+    else
+      p1 = fmpz(2)
+    end
     while order(q) != 1
       p1 = next_prime(p1)
       if gcd(p1, mm) != 1
@@ -2068,7 +2076,7 @@ function induce_action(mR::MapRayClassGrp, Aut::Array{Hecke.NfToNfMor, 1} = Heck
     images = Array{GrpAbFinGenElem,1}(undef, length(lgens))
     for i=1:length(lgens) 
       #println("Elem: $(subs[i].coeff)")
-      @vtime :RayFacElem 3 J = induce_image(lgens[i], Aut[k])
+      @vtime :RayFacElem 3 J = induce_image(Aut[k], lgens[i])
       @vtime :RayFacElem 3 images[i] = mR\J
       #println("Image: $(images[i].coeff)")
     end
@@ -2784,13 +2792,13 @@ function induce_action_new(mR::MapRayClassGrp, Aut::Array{Hecke.NfToNfMor, 1})
     images = Array{GrpAbFinGenElem,1}(undef, length(Igens)+length(IPgens))
     for i=1:length(Igens) 
       #println("Elem: $(subs[i].coeff)")
-      @vtime :RayFacElem 3 J = induce_image(Igens[i], Aut[k])
+      @vtime :RayFacElem 3 J = induce_image(Aut[k], Igens[i])
       @vtime :RayFacElem 3 images[i] = mR\J
       #println("Image: $(images[i].coeff)")
     end
     for i = 1:length(IPgens)
       #println("Elem: $(IPsubs[i].coeff)")
-      Pn = induce_image(IPgens[i], Aut[k])
+      Pn = induce_image(Aut[k],IPgens[i])
       images[i+length(Igens)] = mR.disc_log_inf_plc[Pn]
       #println("Image: $(images[i+length(Igens)].coeff)")
     end

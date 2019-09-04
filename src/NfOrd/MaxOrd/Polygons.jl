@@ -1,4 +1,4 @@
-export newton_polygon, Line, Polygon
+export NewtonPolygon, Line, Polygon
 
 ###############################################################################
 #
@@ -24,9 +24,6 @@ end
 
 mutable struct Polygon
   lines :: Array{Line,1}
-  f :: fmpz_poly
-  phi :: fmpz_poly
-  p :: fmpz
   
   function Polygon(lines::Array{Line,1}; sorted = false)
     polygon = new()
@@ -50,6 +47,26 @@ mutable struct Polygon
     return polygon
   end
 end 
+
+
+mutable struct NewtonPolygon{T}
+  P::Polygon
+  f::T
+  phi::T
+  p::fmpz
+  
+  function NewtonPolygon(f::T, phi::T) where T
+    NP = new{T}()
+    NP.f = f
+    NP.phi = phi
+    NP.P = _newton_polygon(f, phi)
+    return NP
+  end
+end 
+
+lines(N::NewtonPolygon) = N.P.lines
+
+
 
 ###############################################################################
 #
@@ -142,12 +159,12 @@ end
 
 ###############################################################################
 #
-#  Newton polygon
+#  Construction of Newton polygon
 #
 ###############################################################################
 
-function phi_development(f::fmpz_poly, phi::fmpz_poly)
-  dev = Array{fmpz_poly, 1}()
+function phi_development(f::T, phi::T) where T <: PolyElem
+  dev = Array{T, 1}()
   g = f
   while degree(g)>=degree(phi)
     g, r = divrem(g, phi)
@@ -162,27 +179,36 @@ function valuation(f::fmpz_poly, p::Union{fmpz, Int})
   return minimum(l)
 end
 
+function _valuation(f::Generic.Poly{T}) where T <: Union{qadic, padic}
+  return minimum([valuation(coeff(f, i)) for i = 0:degree(f)])
+end
 
-function newton_polygon(dev::Array{fmpz_poly, 1}, p::Union{fmpz, Int})
+
+function _newton_polygon(dev::Array{fmpz_poly, 1}, p::Union{fmpz, Int})
   a = Tuple{Int, Int}[]
   for i = 0:length(dev)-1
     if !iszero(dev[i+1])
-      push!(a, (i,valuation(dev[i+1],p)))
+      push!(a, (i, valuation(dev[i+1], p)))
     end
   end 
   return lowerconvexhull(a)
 end
 
-function newton_polygon(f::fmpz_poly, phi::fmpz_poly, p::Union{fmpz, Int})
-  a = Tuple{Int, Int}[]
+function _newton_polygon(f::fmpz_poly, phi::fmpz_poly, p::Union{fmpz, Int})
   if !(isprime(p))
     error("Not a prime")
   end
   #Compute the development
-  dev=phi_development(f,phi)
-  for i = 0:length(dev)-1
+  dev = phi_development(f, phi)
+  return newton_polygon(dev, p)
+end
+
+function _newton_polygon(f::Generic.Poly{T}, phi::Generic.Poly{T}) where T <: Union{padic, qadic}
+  dev = phi_development(f, phi)
+  a = Tuple{Int, Int}[]
+  for i = 0:length(dev) -1
     if !iszero(dev[i+1])
-      push!(a, (i,valuation(dev[i+1],p)))
+      push!(a, (i, _valuation(dev[i+1])))
     end
   end 
   return lowerconvexhull(a)
@@ -238,14 +264,12 @@ function phi_development_with_quos(f::fmpz_poly, phi::fmpz_poly, Rx::FmpzModPoly
 end
 
 function _floor_newton_polygon(N::Polygon, i::Int)
-  
   j = 1
   while N.lines[j].points[2][1]< i
     j += 1
   end
   l = N.lines[j].points[1][2] - (N.lines[j].points[1][1]-i)*slope(N.lines[j])
   return floor(Int, BigFloat(numerator(l)//denominator(l)))
-
 end
 
 ###############################################################################
@@ -267,7 +291,7 @@ function isregular_at(f::fmpz_poly, p::fmpz)
       F, a = FiniteField(gg, "a", cached = false)
       phi = lift(Zx, gg)
       dev, quos = phi_development_with_quos(f, phi)#, R1x)
-      N = newton_polygon(dev, p)
+      N = _newton_polygon(dev, p)
       for lin in N.lines
         if slope(lin) < 0 && degree(lin) != 1
           rp = residual_polynomial(F, lin, dev, p)
@@ -311,7 +335,7 @@ function gens_overorder_polygons(O::NfOrd, p::fmpz)
       F, a = FiniteField(g, "a", cached = false)
       phi = lift(Zx, g)
       dev, quos = phi_development_with_quos(Zx(f), phi)
-      N = newton_polygon(dev, p)
+      N = _newton_polygon(dev, p)
       if regular
         for lin in N.lines
           if slope(lin) < 0 && degree(lin) != 1
@@ -335,7 +359,7 @@ function gens_overorder_polygons(O::NfOrd, p::fmpz)
       end
     end
   end
-  B = basis_mat(l, FakeFmpqMat)
+  B = basis_matrix(l, FakeFmpqMat)
   hnf_modular_eldiv!(B.num, B.den, :lowerleft)
   B = FakeFmpqMat(view(B.num, nrows(B)-degree(K)+1:nrows(B), 1:degree(K)), B.den)
   if !regular
@@ -437,7 +461,7 @@ function _order_for_polygon_overorder(K::S, elt::Array{T, 1}) where {S, T}
       end
     end
     
-    B = basis_mat(prods, FakeFmpqMat) 
+    B = basis_matrix(prods, FakeFmpqMat) 
     hnf_modular_eldiv!(B.num, B.den, :lowerleft)
     
     dd = B.num[nrows(B) - degree(K) + 1, 1]
@@ -483,7 +507,7 @@ function _from_algs_to_ideals(A::AlgAss{T}, OtoA::Map, AtoO::Map, Ip1, p::Union{
   AA = _dec_com_finite(A)
   @vprint :NfOrd 1 "Done \n"
   ideals = Array{Tuple{typeof(Ip1), Int}, 1}(undef, length(AA))
-  N = basis_mat(Ip1, copy = false)
+  N = basis_matrix(Ip1, copy = false)
   list_bases = Vector{Vector{Vector{fmpz}}}(undef, length(AA))
   for i = 1:length(AA)
     l = Vector{Vector{fmpz}}(undef, dim(AA[i][1]))
@@ -746,9 +770,9 @@ function find_random_second_gen(A::NfAbsOrdIdl{S, T}) where {S, T}
       continue
     end
 
-    mul!(m, m, basis_mat(A, copy = false))
-    d = denominator(basis_mat(O, copy = false))
-    mul!(m, m, basis_mat(O, copy = false).num)
+    mul!(m, m, basis_matrix(A, copy = false))
+    d = denominator(basis_matrix(O, copy = false))
+    mul!(m, m, basis_matrix(O, copy = false).num)
     gen = elem_from_mat_row(nf(O), m, 1, d)
     d = denominator(gen)
     f, e = ppio(d, minimum(A, copy = false))
@@ -798,7 +822,7 @@ function decomposition_type_polygon(O::NfOrd, p::Union{fmpz, Int})
     end
     phi = lift(Zx, g)
     dev = phi_development(f, phi)
-    N = newton_polygon(dev, p)
+    N = _newton_polygon(dev, p)
     if denominator(slope(N.lines[1])) == m
       push!(res, (degree(g), m))
       continue

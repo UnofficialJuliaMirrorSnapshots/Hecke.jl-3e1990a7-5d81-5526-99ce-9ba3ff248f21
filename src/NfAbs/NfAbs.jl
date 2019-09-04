@@ -71,16 +71,16 @@ function NumberField(f::fmpz_poly; cached::Bool = true, check::Bool = true)
 end
 
 @doc Markdown.doc"""
-    pure_extension(n::Int, gen::Integer; cached::Bool = true, check::Bool = true) -> AnticNumberField, nf_elem
-    pure_extension(n::Int, gen::fmpz; cached::Bool = true, check::Bool = true) -> AnticNumberField, nf_elem
+    radical_extension(n::Int, gen::Integer; cached::Bool = true, check::Bool = true) -> AnticNumberField, nf_elem
+    radical_extension(n::Int, gen::fmpz; cached::Bool = true, check::Bool = true) -> AnticNumberField, nf_elem
 
 The number field with defining polynomial $x^n-gen$.
 """
-function pure_extension(n::Int, gen::Integer; cached::Bool = true, check::Bool = true)
-  return pure_extension(n, fmpz(gen), cached = cached, check = check)
+function radical_extension(n::Int, gen::Integer; cached::Bool = true, check::Bool = true)
+  return radical_extension(n, fmpz(gen), cached = cached, check = check)
 end
 
-function pure_extension(n::Int, gen::fmpz; cached::Bool = true, check::Bool = true)
+function radical_extension(n::Int, gen::fmpz; cached::Bool = true, check::Bool = true)
   kx, x = FlintQQ["x"]
   return number_field(x^n - gen, cached = cached, check = check)
 end
@@ -94,17 +94,15 @@ function cyclotomic_field(n::Int; cached::Bool = true)
   return CyclotomicField(n, "z_$n", cached = cached)
 end
 
-#fields with usually large class groups...
 # TODO: Some sort of reference?
 @doc Markdown.doc"""
     wildanger_field(n::Int, B::fmpz) -> AnticNumberField, nf_elem
-    wildanger_field(n::Int, B::Integer) -> AnticNumberField, nf_elem
 
 Returns the field with defining polynomial $x^n + \sum_{i=0}^{n-1} (-1)^{n-i}Bx^i$.
 These fields tend to have non-trivial class groups.
 """
 function wildanger_field(n::Int, B::fmpz; cached::Bool = true)
-  Qx, x = PolynomialRing(FlintQQ)
+  Qx, x = PolynomialRing(FlintQQ, "x", cached = false)
   f = x^n
   for i=0:n-1
     f += (-1)^(n-i)*B*x^i
@@ -164,32 +162,6 @@ characteristic(::AnticNumberField) = 0
 ################################################################################
 
 @doc Markdown.doc"""
-    ispure_extension(K::AnticNumberField) -> Bool
-    
-Tests if $K$ is pure, that is, if the defining polynomial is $x^n - g$ for some
-rational number $g$.
-"""
-function ispure_extension(K::AnticNumberField)
-  if !ismonic(K.pol)
-    return false
-  end
-  return all(i->iszero(coeff(K.pol, i)), 1:degree(K)-1)
-end
-
-@doc Markdown.doc"""
-    iskummer_extension(K::AnticNumberField) -> Bool
-
-Tests if $K$ is a Kummer extension of $\mathbb Q$, that is, if the defining
-polynomial is of the form $x^2 - g$.
-"""
-function iskummer_extension(K::AnticNumberField)
-  if degree(K) != 2
-    return false
-  end
-  return ispure_extension(K)
-end
-
-@doc Markdown.doc"""
     isdefining_polynomial_nice(K::AnticNumberField)
 
 Tests if the defining polynomial of $K$ is integral and monic.
@@ -221,12 +193,6 @@ end
 #
 ################################################################################
 
-@doc Markdown.doc"""
-    basis(K::AnticNumberField) -> Vector{nf_elem}
-
-Returns the power basis of $K$, that is, the elements $1,a,\dotsc,a^{d - 1}$,
-where $d$ is the degree of $K$.
-"""
 function basis(K::AnticNumberField)
   n = degree(K)
   g = gen(K);
@@ -369,32 +335,6 @@ function normal_basis(K::Nemo.AnticNumberField)
   return K(g1)
   
 end
-
-
-function normal_basis2(K::Nemo.AnticNumberField)
-  n = degree(K)
-  Aut = automorphisms(K)
-
-  length(Aut) != degree(K) && error("The field is not normal over the rationals!")
-
-  A = zero_matrix(FlintQQ, n, n)
-  r = one(K)
-  while true
-    r = rand(basis(K), -n:n)
-    for i = 1:n
-      y = Aut[i](r)
-      for j = 1:n
-        A[i,j] = coeff(y, j - 1)
-      end
-    end
-    if !iszero(det(A))
-      break
-    end
-  end
-  return r
-end
-
-
 
 ################################################################################
 #
@@ -561,7 +501,7 @@ function compositum(K::AnticNumberField, L::AnticNumberField)
   end
   KK = NumberField(first(lf.fac)[1])[1]
   Ka, m1, m2 = absolute_field(KK)
-  return Ka, hom(K, Ka, m1(gen(KK))), m2
+  return Ka, hom(K, Ka, preimage(m1, gen(KK))), m2
 end
 
 ################################################################################
@@ -847,3 +787,21 @@ function set_name!(K::AnticNumberField)
   s === nothing || set_name!(K, string(s))
 end
 
+################################################################################
+#
+#  Is linearly disjoint
+#
+################################################################################
+
+function islinearly_disjoint(K1::AnticNumberField, K2::AnticNumberField)
+  if gcd(degree(K1), degree(K2)) == 1
+    return true
+  end
+  d1 = numerator(discriminant(K1.pol))
+  d2 = numerator(discriminant(K2.pol))
+  if gcd(d1, d2) == 1
+    return true
+  end
+  f = change_base_ring(K1.pol, K2)
+  return isirreducible(f)
+end

@@ -212,7 +212,7 @@ function _multgrp_mod_pv(p::NfOrdIdl, v::Int, pv::NfOrdIdl; method=nothing)
     function disc_log2(x::NfOrdQuoRingElem)
       y = OtoQ\x
       r = mod((G1toO.discrete_logarithm(y))[1]*obcs_inv, rel1)
-      y *= gen1_obcs^mod(-r, rel1)
+      y *= powermod(gen1_obcs, mod(-r, rel1), pnumv)
       return append!([r], G2toO.discrete_logarithm(y))
     end
 
@@ -433,7 +433,7 @@ function _pu_mod_pv(pu::NfOrdIdl, pv::NfOrdIdl)
 
   O=order(pu)
   b=basis(pu)
-  N = basis_mat(pv, copy = false)*basis_mat_inv(pu, copy = false)
+  N = basis_matrix(pv, copy = false)*basis_mat_inv(pu, copy = false)
   @assert isone(N.den)
   G = AbelianGroup(N.num)
   S, mS=snf(G)
@@ -1167,8 +1167,8 @@ function _multgrp_non_maximal(Q::NfOrdQuoRing)
   for i = 1:length(m)
     P = prime_ideals[i]
     p = minimum(P)
-    x = valuation(det(basis_mat(A, copy = false)), p)
-    y = valuation(det(basis_mat(P, copy = false)), p)
+    x = valuation(det(basis_matrix(A, copy = false)), p)
+    y = valuation(det(basis_matrix(P, copy = false)), p)
     m[i] = Int(ceil(x/y))
   end
 

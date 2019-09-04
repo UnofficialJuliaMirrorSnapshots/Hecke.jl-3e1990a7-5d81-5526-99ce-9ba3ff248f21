@@ -8,21 +8,21 @@
 # Still hoping for julia/#18466
 
 mutable struct NfRelOrdSet{T}
-  nf::RelativeExtension{T}
+  nf::NumField{T}
 
-  function NfRelOrdSet{T}(K::RelativeExtension{T}) where {T}
+  function NfRelOrdSet{T}(K::NumField{T}) where {T}
     a = new(K)
     return a
   end
 end
 
 mutable struct NfRelOrd{T, S} <: Ring
-  nf::RelativeExtension{T}
-  basis_nf::Vector{RelativeElement{T}}
-  basis_mat::Generic.MatSpaceElem{T}
+  nf::NumField{T}
+  basis_nf::Vector{NumFieldElem{T}}
+  basis_matrix::Generic.MatSpaceElem{T}
   basis_mat_inv::Generic.MatSpaceElem{T}
-  basis_pmat::PMat{T, S}
-  pseudo_basis::Vector{Tuple{RelativeElement{T}, S}}
+  basis_pmatrix::PMat{T, S}
+  pseudo_basis::Vector{Tuple{NumFieldElem{T}, S}}
 
   disc_abs::NfOrdIdl # used if T == nf_elem
   disc_rel#::NfRelOrdIdl{T} # used otherwise; is a forward declaration
@@ -38,7 +38,7 @@ mutable struct NfRelOrd{T, S} <: Ring
 
   inv_coeff_ideals::Vector{S}
 
-  function NfRelOrd{T, S}(K::RelativeExtension{T}) where {T, S}
+  function NfRelOrd{T, S}(K::NumField{T}) where {T, S}
     z = new{T, S}()
     z.nf = K
     z.parent = NfRelOrdSet{T}(K)
@@ -47,21 +47,21 @@ mutable struct NfRelOrd{T, S} <: Ring
     return z
   end
 
-  function NfRelOrd{T, S}(K::RelativeExtension{T}, M::PMat{T, S}) where {T, S}
+  function NfRelOrd{T, S}(K::NumField{T}, M::PMat{T, S}) where {T, S}
     z = NfRelOrd{T, S}(K)
     z.nf = K
     z.parent = NfRelOrdSet{T}(K)
-    z.basis_pmat = M
-    z.basis_mat = M.matrix
+    z.basis_pmatrix = M
+    z.basis_matrix = M.matrix
     return z
   end
 
-  function NfRelOrd{T, S}(K::RelativeExtension{T}, M::Generic.MatSpaceElem{T}) where {T, S}
+  function NfRelOrd{T, S}(K::NumField{T}, M::Generic.MatSpaceElem{T}) where {T, S}
     z = NfRelOrd{T, S}(K)
     z.nf = K
     z.parent = NfRelOrdSet{T}(K)
-    z.basis_mat = M
-    z.basis_pmat = pseudo_matrix(M)
+    z.basis_matrix = M
+    z.basis_pmatrix = pseudo_matrix(M)
     return z
   end
 end
@@ -74,7 +74,7 @@ end
 
 mutable struct NfRelOrdElem{T} <: RingElem
   parent#::NfRelOrd{T, S} # I don't want to drag the S around
-  elem_in_nf::RelativeElement{T}
+  elem_in_nf::NumFieldElem{T}
   coordinates::Vector{T}
   has_coord::Bool
 
@@ -87,7 +87,7 @@ mutable struct NfRelOrdElem{T} <: RingElem
     return z
   end
 
-  function NfRelOrdElem{T}(O::NfRelOrd{T}, a::RelativeElement{T}) where {T}
+  function NfRelOrdElem{T}(O::NfRelOrd{T}, a::NumFieldElem{T}) where {T}
     z = new{T}()
     z.parent = O
     z.elem_in_nf = a
@@ -96,7 +96,7 @@ mutable struct NfRelOrdElem{T} <: RingElem
     return z
   end
 
-  function NfRelOrdElem{T}(O::NfRelOrd{T}, a::RelativeElement{T}, arr::Vector{T}) where {T}
+  function NfRelOrdElem{T}(O::NfRelOrd{T}, a::NumFieldElem{T}, arr::Vector{T}) where {T}
     z = new{T}()
     z.parent = O
     z.elem_in_nf = a
@@ -124,9 +124,9 @@ end
 mutable struct NfRelOrdFracIdl{T, S}
   order::NfRelOrd{T, S}
   parent::NfRelOrdFracIdlSet{T, S}
-  basis_pmat::PMat{T, S}
-  pseudo_basis::Vector{Tuple{RelativeElement{T}, S}}
-  basis_mat::Generic.MatSpaceElem{T}
+  basis_pmatrix::PMat{T, S}
+  pseudo_basis::Vector{Tuple{NumFieldElem{T}, S}}
+  basis_matrix::Generic.MatSpaceElem{T}
   basis_mat_inv::Generic.MatSpaceElem{T}
   den::fmpz
 
@@ -143,12 +143,12 @@ mutable struct NfRelOrdFracIdl{T, S}
 
   function NfRelOrdFracIdl{T, S}(O::NfRelOrd{T, S}, M::PMat{T, S}) where {T, S}
     z = NfRelOrdFracIdl{T, S}(O)
-    z.basis_pmat = M
-    z.basis_mat = M.matrix
+    z.basis_pmatrix = M
+    z.basis_matrix = M.matrix
     return z
   end
 
-  function NfRelOrdFracIdl{T, S}(O::NfRelOrd{T, S}, a::Array{Tuple{T1, S}}) where {T1 <: RelativeElement{T}, S} where T
+  function NfRelOrdFracIdl{T, S}(O::NfRelOrd{T, S}, a::Array{Tuple{T1, S}}) where {T1 <: NumFieldElem{T}, S} where T
     z = NfRelOrdFracIdl{T, S}(O)
     z.pseudo_basis = a
     return z
@@ -173,9 +173,9 @@ end
 mutable struct NfRelOrdIdl{T, S}
   order::NfRelOrd{T, S}
   parent::NfRelOrdIdlSet{T, S}
-  basis_pmat::PMat{T, S}
-  pseudo_basis::Vector{Tuple{RelativeElement{T}, S}}
-  basis_mat::Generic.MatSpaceElem{T}
+  basis_pmatrix::PMat{T, S}
+  pseudo_basis::Vector{Tuple{NumFieldElem{T}, S}}
+  basis_matrix::Generic.MatSpaceElem{T}
   basis_mat_inv::Generic.MatSpaceElem{T}
 
   norm
@@ -188,7 +188,7 @@ mutable struct NfRelOrdIdl{T, S}
   minimum
   non_index_div_poly::fq_poly # only used if the ideal is a prime ideal not dividing the index
   p_uniformizer::NfRelOrdElem{T}
-  anti_uniformizer::RelativeElement{T}
+  anti_uniformizer::NumFieldElem{T}
 
   function NfRelOrdIdl{T, S}(O::NfRelOrd{T, S}) where {T, S}
     z = new{T, S}()
@@ -202,12 +202,12 @@ mutable struct NfRelOrdIdl{T, S}
 
   function NfRelOrdIdl{T, S}(O::NfRelOrd{T, S}, M::PMat{T, S}) where {T, S}
     z = NfRelOrdIdl{T, S}(O)
-    z.basis_pmat = M
-    z.basis_mat = M.matrix
+    z.basis_pmatrix = M
+    z.basis_matrix = M.matrix
     return z
   end
 
-  function NfRelOrdIdl{T, S}(O::NfRelOrd{T, S}, a::Array{Tuple{T1, S}}) where {T1 <: RelativeElement{T}, S} where T
+  function NfRelOrdIdl{T, S}(O::NfRelOrd{T, S}, a::Array{Tuple{T1, S}}) where {T1 <: NumFieldElem{T}, S} where T
     z = NfRelOrdIdl{T, S}(O)
     z.pseudo_basis = a
     return z
@@ -220,7 +220,7 @@ end
 #
 ################################################################################
 
-mutable struct NfRel_ns{T} <: RelativeExtension{T}
+mutable struct NfRel_ns{T} <: NonSimpleNumField{T}
   base_ring::Nemo.Field
   pol::Array{Nemo.Generic.MPoly{T}, 1}
   abs_pol::Array{Generic.Poly{T}, 1}
@@ -238,7 +238,7 @@ mutable struct NfRel_ns{T} <: RelativeExtension{T}
   end
 end
 
-mutable struct NfRel_nsElem{T} <: RelativeElement{T}
+mutable struct NfRel_nsElem{T} <: NonSimpleNumFieldElem{T}
   data::Nemo.Generic.MPoly{T}
   parent::NfRel_ns{T}
 
@@ -256,20 +256,20 @@ end
 mutable struct RelOrdQuoRing{T1, T2, T3} <: Ring
   base_ring::T1
   ideal::T2
-  basis_pmat::T3
+  basis_pmatrix::T3
 
   function RelOrdQuoRing{T1, T2, T3}(O::T1, I::T2) where { T1, T2, T3 }
     z = new{T1, T2, T3}()
     z.base_ring = O
     z.ideal = I
-    z.basis_pmat = basis_pmat(I)
+    z.basis_pmatrix = basis_pmatrix(I)
     return z
   end
 end
 
 function RelOrdQuoRing(O::T1, I::T2) where { T1, T2 }
   @assert T2 == ideal_type(O)
-  return RelOrdQuoRing{T1, T2, typeof(basis_pmat(I, copy = false))}(O, I)
+  return RelOrdQuoRing{T1, T2, typeof(basis_pmatrix(I, copy = false))}(O, I)
 end
 
 # T1, T2 and T3 as for RelOrdQuoRing, S is the elem_type of the order

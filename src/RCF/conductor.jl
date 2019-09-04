@@ -99,7 +99,7 @@ function _1pluspk_1pluspk1(K::AnticNumberField, p::NfOrdIdl, pk::NfOrdIdl, pv::N
   
   O = maximal_order(K)
   b = basis(pk, copy = false)
-  N = basis_mat(pv, copy = false)*basis_mat_inv(pk, copy = false)
+  N = basis_matrix(pv, copy = false)*basis_mat_inv(pk, copy = false)
   G = AbelianGroup(N.num)
   S, mS = snf(G)
   #Generators
@@ -1162,7 +1162,7 @@ function norm_group(mL::NfToNfMor, mR::Hecke.MapRayClassGrp, expected_degree::In
   n = divexact(degree(L), degree(K))
   max_stable = 2*n
   stable = max_stable
-  p = N
+  p = 2^10
   Q, mQ = quo(R, els, false)
   while true
     if order(Q) == expected_degree
@@ -1172,6 +1172,9 @@ function norm_group(mL::NfToNfMor, mR::Hecke.MapRayClassGrp, expected_degree::In
       break
     end
     p = next_prime(p)
+    while N % p == 0
+      p = next_prime(p)
+    end
     lP = prime_decomposition(O, p)
     for (P, e) in lP
       lQ = prime_decomposition_type(mL, P)
@@ -1186,7 +1189,33 @@ function norm_group(mL::NfToNfMor, mR::Hecke.MapRayClassGrp, expected_degree::In
       end
     end
   end
-  return sub(R, els, false)
+  return sub(R, els, !false)
+end
+
+@doc Markdown.doc"""
+    maximal_abelian_subfield(::Type{ClassField}, K::AnticNumberField) -> ClassField
+
+The maximal abelian subfield of $K$ as a class field, ie. the norm group
+is computed and the corresponding {{{ray_class_field}}} created.
+"""
+function maximal_abelian_subfield(::Type{ClassField}, K::AnticNumberField)
+  Zx, x = PolynomialRing(FlintZZ, cached = false)
+  QQ = number_field(x-1)[1]
+  R, mR = ray_class_group(discriminant(maximal_order(K))*maximal_order(QQ), infinite_places(QQ), n_quo = degree(K))
+  f = NfToNfMor(QQ, K, K(1))
+  N, mN = norm_group(f, mR)
+  return ray_class_field(mR, quo(R, N)[2])
+end
+
+@doc Markdown.doc"""
+    cyclotomic_field(::Type{ClassField}, n::Int) -> ClassField
+
+The $n$-th cyclotomic field as a {{{ray_class_field}}}
+"""
+function cyclotomic_field(::Type{ClassField}, n::Int)
+  Zx, x = PolynomialRing(FlintZZ, cached = false)
+  QQ = number_field(x-1)[1]
+  return ray_class_field(n*maximal_order(QQ), infinite_places(QQ))
 end
 
 function norm_group_map(R::ClassField{S, T}, r::Vector{<:ClassField}, map = false) where {S, T}
@@ -1350,7 +1379,7 @@ function normal_closure(C::ClassField)
   end
   aut = automorphisms(k)
   @assert length(aut) == degree(k)
-  fin = lcm([induce_image(c[1], x) for x = aut])
+  fin = lcm([induce_image(x, c[1]) for x = aut])
 
   D = ray_class_field(fin, inf, n_quo = Int(exponent(codomain(C.quotientmap))))
   h = norm_group_map(D, C)
@@ -1401,11 +1430,11 @@ end
 function isnormal_easy(C::ClassField)
   aut = automorphisms(base_field(C))
   c, inf = conductor(C)
-  if any(x-> c != induce_image(c, x), aut)
+  if any(x-> c != induce_image(x, c), aut)
     return false
   end
   s1 = Set(inf)
-  if any(x -> s1 != Set(induce_image(y, x) for y = s1), aut)
+  if any(x -> s1 != Set(induce_image(x, y) for y = s1), aut)
     return false
   end
   C = rewrite_with_conductor(C)
@@ -1481,11 +1510,11 @@ function iscentral(C::ClassField)
   aut = automorphisms(base_field(C))
   c, inf = conductor(C)
 
-  if any(x-> c != induce_image(c, x), aut)
+  if any(x-> c != induce_image(x, c), aut)
     return false
   end
   s1 = Set(inf)
-  if any(x -> s1 != Set(induce_image(y, x) for y = s1), aut)
+  if any(x -> s1 != Set(induce_image(x, y) for y = s1), aut)
     return false
   end
   C = rewrite_with_conductor(C)

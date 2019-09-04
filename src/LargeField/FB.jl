@@ -1,23 +1,4 @@
 #Aim: have map operate on FB
-#
-
-function induce_image(A::NfOrdIdl, S::Map)
-  #S has to be an automorphism!!!!
-  O = order(A)
-  K = O.nf
-  B = ideal(order(A), A.gen_one, O(S(K(A.gen_two)))) # set is prime, norm, ...
-  for i in [:is_prime, :gens_normal, :gens_weakly_normal, :is_principal, 
-            :iszero, :minimum, :norm, :splitting_type]
-    if isdefined(A, i)
-      setfield!(B, i, getfield(A, i))
-    end
-  end
-  if isdefined(A, :princ_gen)
-    B.princ_gen = O(S(K(A.princ_gen)))
-  end
-  # whatever is known, transfer it...possibly using S as well...
-  return B
-end
 
 @doc Markdown.doc"""
     compose_mod(x::nmod_poly, y::nmod_poly, z::nmod_poly) -> nmod_poly
@@ -71,7 +52,7 @@ function induce(FB::Hecke.NfFactorBase, A::Map)
     if length(FP.lp) < 3 || isindex_divisor(O, p) || p > 2^60
       lp = [x[2] for x = FP.lp]
       for (i, P) in FP.lp
-        Q = induce_image(P, A)
+        Q = induce_image(A, P)
         id = findfirst(isequal(Q), lp)
         @assert id !== nothing        
         push!(prm, (i, FP.lp[id][1]))

@@ -14,7 +14,7 @@ Base.copy(d::nf_elem) = deepcopy(d)
 #
 ################################################################################
 
-function basis_mat(A::Array{nf_elem, 1}, ::Type{FakeFmpqMat})
+function basis_matrix(A::Array{nf_elem, 1}, ::Type{FakeFmpqMat})
   @assert length(A) > 0
   n = length(A)
   d = degree(parent(A[1]))
@@ -38,7 +38,7 @@ function basis_mat(A::Array{nf_elem, 1}, ::Type{FakeFmpqMat})
   return FakeFmpqMat(M, deno)
 end
 
-function basis_mat(A::Array{nf_elem, 1})
+function basis_matrix(A::Array{nf_elem, 1})
   @assert length(A) > 0
   n = length(A)
   d = degree(parent(A[1]))
@@ -76,7 +76,7 @@ end
 function charpoly(Zx::FmpzPolyRing, a::nf_elem)
   f = charpoly(a)
   if !isone(denominator(f))
-    error("element is not integral")
+    throw(error("Element is not integral"))
   end
   return Zx(f)
 end
@@ -117,7 +117,7 @@ end
 function minpoly(Zx::FmpzPolyRing, a::nf_elem)
   f = minpoly(a)
   if !isone(denominator(f))
-    error("element is not integral")
+    throw(error("Element is not integral"))
   end
   return Zx(f)
 end
@@ -224,7 +224,6 @@ end
 #
 ################################################################################
 
-
 @doc Markdown.doc"""
     isnorm_divisible(a::nf_elem, n::fmpz) -> Bool
 Checks if the norm of $a$ is divisible by $n$, assuming that the norm of $a$ is
@@ -246,7 +245,6 @@ function isnorm_divisible(a::nf_elem, n::fmpz)
   end 
   return iszero(el) 
 end
-
 
 ################################################################################
 #
@@ -347,15 +345,6 @@ function norm(f::PolyElem{nf_elem})
   return resultant(T, h)
 end
 
-function norm(f::PolyElem{T}) where T <: NfRelElem
-  Kx = parent(f)
-  K = base_ring(f)
-
-  P = polynomial_to_power_sums(f, degree(f)*degree(K))
-  PQ = [tr(x) for x = P]
-  return power_sums_to_polynomial(PQ)
-end
-
 ################################################################################
 #
 #  Factorization
@@ -414,7 +403,7 @@ function factor(f::PolyElem{nf_elem})
 
   f = f*(1//lead(f))
 
-  if true#degree(f) < degree(K)
+  if degree(f) < degree(K)
     lf = factor_trager(f)
   else
     lf = factor_new(f)
@@ -709,13 +698,13 @@ end
     issquare(a::nf_elem) -> Bool, nf_elem
 Tests if $a$ is a square and return the root if possible.
 """
-Nemo.issquare(a::nf_elem) = ispower(a, 2)
+issquare(a::nf_elem) = ispower(a, 2)
 
 @doc Markdown.doc"""
     sqrt(a::nf_elem) -> nf_elem
 The square-root of $a$ or an error if this is not possible.
  """
-Nemo.sqrt(a::nf_elem) = root(a, 2)
+sqrt(a::nf_elem) = root(a, 2)
 
 @doc Markdown.doc"""
     root(a::nf_elem, n::Int) -> nf_elem
@@ -828,16 +817,53 @@ end
 #
 ################################################################################
 
+function _mod_sym!_antic(a::nf_elem, b::fmpz)
+  ccall((:nf_elem_smod_fmpz, :libantic), Nothing, (Ref{nf_elem}, Ref{nf_elem}, Ref{fmpz}, Ref{AnticNumberField}), a, a, b, parent(a))
+  return a
+end
+
+function _mod_sym_antic(a::nf_elem, b::fmpz)
+  z = deepcopy(a)
+  _mod_sym!_antic(z, b)
+end
+
+function _mod!_antic(a::nf_elem, b::fmpz)
+  ccall((:nf_elem_mod_fmpz, :libantic), Nothing, (Ref{nf_elem}, Ref{nf_elem}, Ref{fmpz}, Ref{AnticNumberField}), a, a, b, parent(a))
+  return a
+end
+
+function _mod_antic(a::nf_elem, b::fmpz)
+  z = deepcopy(a)
+  _mod!_antic(z, b)
+end
+
 function __mod(a::nf_elem, b::fmpz, fl::Bool = true)#, sym::Bool = false) # Not yet
   z = parent(a)()
   ccall((:nf_elem_mod_fmpz_den, :libantic), Nothing, (Ref{nf_elem}, Ref{nf_elem}, Ref{fmpz}, Ref{AnticNumberField}, Cint), z, a, b, parent(a), Cint(fl))
   return z
 end
 
+function coprime_denominator(a::nf_elem, b::fmpz)
+  z = parent(a)()
+  ccall((:nf_elem_coprime_den, :libantic), Nothing, (Ref{nf_elem}, Ref{nf_elem}, Ref{fmpz}, Ref{AnticNumberField}), z, a, b, parent(a))
+  return z
+end
+
 import Hecke.mod_sym!, Hecke.rem!, Hecke.mod!, Hecke.mod, Hecke.rem
 
 function mod_sym!(a::nf_elem, b::fmpz)
-  mod_sym!(a, b, div(b, 2))
+  #ww = deepcopy(a)
+  #w = deepcopy(a)
+  #_mod_sym!_antic(w, b)
+  z = mod_sym!(a, b, div(b, 2))
+  #if z != w
+  #  @show w
+  #  @show b
+  #  @show a
+  #  @show w
+  #  error("Adsd")
+  #end
+  return z
 end
 
 function mod_sym!(a::nf_elem, b::fmpz, b2::fmpz)
@@ -845,6 +871,14 @@ function mod_sym!(a::nf_elem, b::fmpz, b2::fmpz)
   if degree(parent(a)) == 1
     Nemo.num_coeff!(z, a, 0)
     _num_setcoeff!(a, 0, mod_sym(z, b))
+    return a
+  end
+  if degree(parent(a)) == 2
+    #TODO: call Tommy's new c-function (when available)
+    Nemo.num_coeff!(z, a, 0)
+    iszero(z) || _num_setcoeff!(a, 0, mod_sym(z, b))
+    Nemo.num_coeff!(z, a, 1)
+    iszero(z) || _num_setcoeff!(a, 1, mod_sym(z, b))
     return
   end
   for i=0:a.elem_length-1
@@ -855,6 +889,7 @@ function mod_sym!(a::nf_elem, b::fmpz, b2::fmpz)
     end
     _num_setcoeff!(a, i, z)
   end
+  return a
 end
 
 function mod(b::nf_elem, p::fmpz)
@@ -872,7 +907,9 @@ mod(x::nf_elem, y::Integer) = mod(x, fmpz(y))
 
 #Assuming that the denominator of a is one, reduces all the coefficients modulo p
 function _mod!(a::nf_elem, b::fmpz)
-  @hassert :NfOrd 1 isone(denominator(a))
+  #w = deepcopy(a)
+  #_mod!_antic(w, b)
+  #@hassert :NfOrd 1 isone(denominator(a))
   z = fmpz()
   d = degree(parent(a))
   if d == 1
@@ -893,6 +930,7 @@ function _mod!(a::nf_elem, b::fmpz)
       _num_setcoeff!(a, i, z)
     end
   end
+  #@assert a == w
   return nothing
 end
 
@@ -912,7 +950,9 @@ function rem(a::nf_elem, b::fmpz)
 end
 
 function mod_sym(a::nf_elem, b::fmpz)
-  return mod_sym(a, b, div(b, 2))
+  z = mod_sym(a, b, div(b, 2))
+  #@assert z == _mod_sym_antic(a, b)
+  return z
 end
 
 function mod_sym(a::nf_elem, b::fmpz, b2::fmpz)
