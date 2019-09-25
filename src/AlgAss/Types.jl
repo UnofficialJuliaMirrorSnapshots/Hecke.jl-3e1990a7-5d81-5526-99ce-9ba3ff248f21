@@ -479,6 +479,7 @@ mutable struct AlgMat{T, S} <: AbsAlgAss{T}
   mult_table::Array{T, 3} # e_i*e_j = sum_k mult_table[i, j, k]*e_k
   canonical_basis::Int # whether A[(j - 1)*n + i] == E_ij, where E_ij = (e_kl)_kl with e_kl = 1 if i =k and j = l and e_kl = 0 otherwise.
   center#Tuple{AlgAss{T}, mor(AlgAss{T}, AlgAss{T})
+  trace_basis_elem::Vector{T}
 
   function AlgMat{T, S}(R::Ring) where {T, S}
     A = new{T, S}()
@@ -526,11 +527,11 @@ mutable struct AlgMatElem{T, S, Mat} <: AbsAlgAssElem{T}
   end
 end
 
-###############################################################################
+################################################################################
 #
 #  AlgAssRelOrd
 #
-###############################################################################
+################################################################################
 
 # S is the element type of the base field of the algebra, T the fractional ideal
 # type of this field
@@ -575,11 +576,11 @@ mutable struct AlgAssRelOrd{S, T} <: Ring
   end
 end
 
-###############################################################################
+################################################################################
 #
 #  AlgAssRelOrdElem
 #
-###############################################################################
+################################################################################
 
 mutable struct AlgAssRelOrdElem{S, T} <: RingElem
   parent::AlgAssRelOrd{S, T}
@@ -615,19 +616,25 @@ mutable struct AlgAssRelOrdElem{S, T} <: RingElem
   end
 end
 
-###############################################################################
+################################################################################
 #
 #  AlgAssRelOrdIdl
 #
-###############################################################################
+################################################################################
 
 mutable struct AlgAssRelOrdIdl{S, T}
   order::AlgAssRelOrd{S, T}
+
+  left_order::AlgAssRelOrd{S, T} # the largest order of which the ideal is a left ideal
+  right_order::AlgAssRelOrd{S, T} # as above
+
   pseudo_basis::Vector{Tuple{AbsAlgAssElem{S}, T}}
+  # The basis matrices are in the basis of `order`
   basis_pmatrix::PMat{S, T}
   basis_matrix::Generic.MatSpaceElem{S}
   basis_mat_inv::Generic.MatSpaceElem{S}
 
+  # isleft and isright with respect to `order`
   isleft::Int                      # 0 Not known
                                    # 1 Known to be a left ideal
                                    # 2 Known not to be a left ideal
@@ -648,6 +655,53 @@ mutable struct AlgAssRelOrdIdl{S, T}
   end
 
   function AlgAssRelOrdIdl{S, T}(O::AlgAssRelOrd{S, T}, M::PMat{S, T}) where {S, T}
+    z = AlgAssRelOrdIdl{S, T}(O)
+    z.basis_pmatrix = M
+    z.basis_matrix = M.matrix
+    return z
+  end
+end
+
+################################################################################
+#
+#  AlgAssRelOrdFracIdl
+#
+################################################################################
+
+mutable struct AlgAssRelOrdFracIdl{S, T}
+  order::AlgAssRelOrd{S, T}
+
+  left_order::AlgAssRelOrd{S, T} # the largest order of which the ideal is a left ideal
+  right_order::AlgAssRelOrd{S, T} # as above
+
+  pseudo_basis::Vector{Tuple{AbsAlgAssElem{S}, T}}
+  # The basis matrices are in the basis of `order`
+  basis_pmatrix::PMat{S, T}
+  basis_matrix::Generic.MatSpaceElem{S}
+  basis_mat_inv::Generic.MatSpaceElem{S}
+  den::fmpz
+
+  # isleft and isright with respect to `order`
+  isleft::Int                      # 0 Not known
+                                   # 1 Known to be a left ideal
+                                   # 2 Known not to be a left ideal
+  isright::Int                     # as for isleft
+
+  iszero::Int                      # 0: don't know, 1: known to be zero, 2: known to be not zero
+
+  norm::T
+  normred::T
+
+  function AlgAssRelOrdFracIdl{S, T}(O::AlgAssRelOrd{S, T}) where {S, T}
+    z = new{S, T}()
+    z.order = O
+    z.isleft = 0
+    z.isright = 0
+    z.iszero = 0
+    return z
+  end
+
+  function AlgAssRelOrdFracIdl{S, T}(O::AlgAssRelOrd{S, T}, M::PMat{S, T}) where {S, T}
     z = AlgAssRelOrdIdl{S, T}(O)
     z.basis_pmatrix = M
     z.basis_matrix = M.matrix

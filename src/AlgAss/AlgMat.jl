@@ -25,8 +25,8 @@ elem_type(::Type{AlgMat{T, S}}) where { T, S } = AlgMatElem{T, AlgMat{T, S}, S}
 order_type(::AlgMat{fmpq, S}) where { S } = AlgAssAbsOrd{AlgMat{fmpq, S}, elem_type(AlgMat{fmpq, S})}
 order_type(::Type{AlgMat{fmpq, S}}) where { S } = AlgAssAbsOrd{AlgMat{fmpq, S}, elem_type(AlgMat{fmpq, S})}
 
-order_type(::AlgMat{T, S}) where { T <: NumFieldElem, S } = AlgAssRelOrd{T, frac_ideal_type(order_type(parent_type(T)))}
-order_type(::Type{AlgMat{T, S}}) where { T <: NumFieldElem, S } = AlgAssRelOrd{T, frac_ideal_type(order_type(parent_type(T)))}
+order_type(::AlgMat{T, S}) where { T <: NumFieldElem, S } = AlgAssRelOrd{T, fractional_ideal_type(order_type(parent_type(T)))}
+order_type(::Type{AlgMat{T, S}}) where { T <: NumFieldElem, S } = AlgAssRelOrd{T, fractional_ideal_type(order_type(parent_type(T)))}
 
 # Returns the dimension d of the coefficient_ring of A, so that dim(A) = degree(A)^2 + d.
 function dim_of_coefficient_ring(A::AlgMat)
@@ -187,6 +187,8 @@ function matrix_algebra(R::Ring, n::Int)
   A.basis = B
   A.one = identity_matrix(R, n)
   A.canonical_basis = 1
+  A.issimple = 1
+  A.issemisimple = 1
   return A
 end
 
@@ -441,15 +443,6 @@ end
 
 ################################################################################
 #
-#  Equality
-#
-################################################################################
-
-# So far we don't have a canonical basis
-==(A::AlgMat, B::AlgMat) = A === B
-
-################################################################################
-#
 #  Inclusion of matrices
 #
 ################################################################################
@@ -499,15 +492,13 @@ end
 > Returns the center $C$ of $A$ and the inclusion $C \to A$.
 """
 function center(A::AlgMat{T, S}) where {T, S}
-  if iscommutative(A)
-    B, mB = AlgAss(A)
-    return B, mB
-  end
-
   if isdefined(A, :center)
     return A.center::Tuple{AlgAss{T}, morphism_type(AlgAss{T}, typeof(A))}
   end
 
+  # Unlike for AlgAss, we should cache the centre even if A is commutative
+  # since it is of a different type, so A !== center(A)[1].
+  # Otherwise center(A)[1] !== center(A)[1] which is really annoying.
   B, mB = AlgAss(A)
   C, mC = center(B)
   mD = compose_and_squash(mB, mC)

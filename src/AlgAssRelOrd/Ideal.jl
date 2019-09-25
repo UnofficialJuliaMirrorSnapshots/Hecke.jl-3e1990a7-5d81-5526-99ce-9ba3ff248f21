@@ -2,12 +2,17 @@ export left_order, right_order, normred, locally_free_basis, islocally_free
 
 @doc Markdown.doc"""
     order(I::AlgAssRelOrdIdl) -> AlgAssRelOrd
+    order(I::AlgAssRelOrdFracIdl) -> AlgAssRelOrd
 
 > Returns the order containing $I$.
 """
-@inline order(I::AlgAssRelOrdIdl) = I.order
+@inline order(I::Union{ AlgAssRelOrdIdl, AlgAssRelOrdFracIdl }) = I.order
 
-iszero(I::AlgAssRelOrdIdl) = (I.iszero == 1)
+iszero(I::Union{ AlgAssRelOrdIdl, AlgAssRelOrdFracIdl }) = (I.iszero == 1)
+
+# The basis matrix is (should be) in lowerleft HNF, so if the upper left corner
+# is not zero, then the matrix has full rank.
+isfull_lattice(a::Union{ AlgAssRelOrdIdl, AlgAssRelOrdFracIdl }) = !iszero(basis_matrix(a, copy = false)[1, 1])
 
 ###############################################################################
 #
@@ -32,10 +37,16 @@ function Base.deepcopy_internal(a::AlgAssRelOrdIdl, dict::IdDict)
   b = typeof(a)(order(a))
   for i in fieldnames(typeof(a))
     if isdefined(a, i)
-      if i != :order
+      if i != :order && i != :right_order && i != :left_order
         setfield!(b, i, Base.deepcopy_internal(getfield(a, i), dict))
       end
     end
+  end
+  if isdefined(a, :right_order)
+    b.right_order = right_order(a)
+  end
+  if isdefined(a, :left_order)
+    b.left_order = left_order(a)
   end
   return b
 end
@@ -46,27 +57,7 @@ end
 #
 ################################################################################
 
-function assure_has_basis_pmatrix(a::AlgAssRelOrdIdl)
-  if isdefined(a, :basis_pmatrix)
-    return nothing
-  end
-  if !isdefined(a, :pseudo_basis)
-    error("No pseudo_basis and no basis_pmatrix defined.")
-  end
-  pb = pseudo_basis(a, copy = false)
-  A = algebra(order(a))
-  M = zero_matrix(base_ring(A), dim(A), dim(A))
-  C = Vector{frac_ideal_type(order_type(base_ring(A)))}()
-  for i = 1:dim(A)
-    elem_to_mat_row!(M, i, pb[i][1])
-    push!(C, deepcopy(pb[i][2]))
-  end
-  M = M*basis_mat_inv(order(a), copy = false)
-  a.basis_pmatrix = pseudo_hnf(PseudoMatrix(M, C), :lowerleft, true)
-  return nothing
-end
-
-function assure_has_pseudo_basis(a::AlgAssRelOrdIdl)
+function assure_has_pseudo_basis(a::Union{ AlgAssRelOrdIdl, AlgAssRelOrdFracIdl })
   if isdefined(a, :pseudo_basis)
     return nothing
   end
@@ -77,7 +68,7 @@ function assure_has_pseudo_basis(a::AlgAssRelOrdIdl)
   B = pseudo_basis(order(a), copy = false)
   A = algebra(order(a))
   K = base_ring(A)
-  pb = Vector{Tuple{elem_type(A), frac_ideal_type(order_type(K))}}()
+  pb = Vector{Tuple{elem_type(A), fractional_ideal_type(order_type(K))}}()
   for i = 1:dim(A)
     t = A()
     for j = 1:dim(A)
@@ -89,7 +80,7 @@ function assure_has_pseudo_basis(a::AlgAssRelOrdIdl)
   return nothing
 end
 
-function assure_has_basis_matrix(a::AlgAssRelOrdIdl)
+function assure_has_basis_matrix(a::Union{ AlgAssRelOrdIdl, AlgAssRelOrdFracIdl })
   if isdefined(a, :basis_matrix)
     return nothing
   end
@@ -97,10 +88,11 @@ function assure_has_basis_matrix(a::AlgAssRelOrdIdl)
   return nothing
 end
 
-function assure_has_basis_mat_inv(a::AlgAssRelOrdIdl)
+function assure_has_basis_mat_inv(a::Union{ AlgAssRelOrdIdl, AlgAssRelOrdFracIdl })
   if isdefined(a, :basis_mat_inv)
     return nothing
   end
+  @assert isfull_lattice(a) "The ideal is not a full lattice"
   a.basis_mat_inv = inv(basis_matrix(a, copy = false))
   return nothing
 end
@@ -113,12 +105,13 @@ end
 
 @doc Markdown.doc"""
     pseudo_basis(a::AlgAssRelOrdIdl; copy::Bool = true)
+    pseudo_basis(a::AlgAssRelOrdFracIdl; copy::Bool = true)
 
 > Returns the pseudo basis of $a$, i. e. a vector $v$ of pairs $(e_i, a_i)$ such
 > that $a = \bigoplus_i a_i e_i$, where $e_i$ is an element of the algebra
 > containing $a$ and $a_i$ is a fractional ideal of `base_ring(order(a))`.
 """
-function pseudo_basis(a::AlgAssRelOrdIdl; copy::Bool = true)
+function pseudo_basis(a::Union{ AlgAssRelOrdIdl, AlgAssRelOrdFracIdl }; copy::Bool = true)
   assure_has_pseudo_basis(a)
   if copy
     return deepcopy(a.pseudo_basis)
@@ -129,11 +122,11 @@ end
 
 @doc Markdown.doc"""
     basis_pmatrix(a::AlgAssRelOrdIdl; copy::Bool = true) -> PMat
+    basis_pmatrix(a::AlgAssRelOrdFracIdl; copy::Bool = true) -> PMat
 
 > Returns the basis pseudo-matrix of $a$ with respect to the basis of the order.
 """
-function basis_pmatrix(a::AlgAssRelOrdIdl; copy::Bool = true)
-  assure_has_basis_pmatrix(a)
+function basis_pmatrix(a::Union{ AlgAssRelOrdIdl, AlgAssRelOrdFracIdl }; copy::Bool = true)
   if copy
     return deepcopy(a.basis_pmatrix)
   else
@@ -149,11 +142,12 @@ end
 
 @doc Markdown.doc"""
     basis_matrix(a::AlgAssRelOrdIdl; copy::Bool = true) -> MatElem
+    basis_matrix(a::AlgAssRelOrdFracIdl; copy::Bool = true) -> MatElem
 
 > Returns the basis matrix of $a$, that is the basis pseudo-matrix of $a$ without
 > the coefficient ideals.
 """
-function basis_matrix(a::AlgAssRelOrdIdl; copy::Bool = true)
+function basis_matrix(a::Union{ AlgAssRelOrdIdl, AlgAssRelOrdFracIdl }; copy::Bool = true)
   assure_has_basis_matrix(a)
   if copy
     return deepcopy(a.basis_matrix)
@@ -164,10 +158,11 @@ end
 
 @doc Markdown.doc"""
     basis_mat_inv(a::AlgAssRelOrdIdl; copy::Bool = true) -> MatElem
+    basis_mat_inv(a::AlgAssRelOrdFracIdl; copy::Bool = true) -> MatElem
 
 > Returns the inverse of the basis matrix of $a$.
 """
-function basis_mat_inv(a::AlgAssRelOrdIdl; copy::Bool = true)
+function basis_mat_inv(a::Union{ AlgAssRelOrdIdl, AlgAssRelOrdFracIdl }; copy::Bool = true)
   assure_has_basis_mat_inv(a)
   if copy
     return deepcopy(a.basis_mat_inv)
@@ -185,9 +180,10 @@ end
 @doc Markdown.doc"""
     +(a::AlgAssRelOrdIdl, b::AlgAssRelOrdIdl) -> AlgAssRelOrdIdl
 
-> Returns $a + b$.
+> Returns $a + b$, requires `order(a) === order(b)`.
 """
 function +(a::AlgAssRelOrdIdl{S, T}, b::AlgAssRelOrdIdl{S, T}) where {S, T}
+  @assert order(a) === order(b)
   if iszero(a)
     return deepcopy(b)
   elseif iszero(b)
@@ -202,24 +198,33 @@ end
 
 @doc Markdown.doc"""
     *(a::AlgAssRelOrdIdl, b::AlgAssRelOrdIdl) -> AlgAssRelOrdIdl
+    *(a::AlgAssRelOrdIdl, b::AlgAssRelOrdIdl) -> AlgAssRelOrdFracIdl
 
-> Returns $a \cdot b$.
+> Returns $c := a \cdot b$.
+> If `order(a) == order(b)`, then $c$ is of type `AlgAssRelOrdIdl` and
+> `order(c) == order(a)`.
+> Otherwise it is assumed that both $a$ and $b$ are full lattices in the algebra.
+> In this case $c$ is returned as an ideal of `left_order(a)`. If $c$ is contained
+> in this order, then the returned type is `AlgAssRelOrdIdl`, else it is
+> `AlgAssRelOrdFracIdl`.
 """
 function *(a::AlgAssRelOrdIdl{S, T}, b::AlgAssRelOrdIdl{S, T}) where {S, T}
-  if iszero(a)
-    return deepcopy(a)
-  elseif iszero(b)
-    return deepcopy(b)
+  if order(a) === order(b)
+    return _mul_same_order(a, b)
+  else
+    @assert isfull_lattice(a) && isfull_lattice(b)
+    return _mul_full_lattice(a, b)
   end
+end
 
-  d = degree(order(a))
-  pba = pseudo_basis(a, copy = false)
-  pbb = pseudo_basis(b, copy = false)
+# Computes a basis pseudo-matrix of the product of the lattices generated by the
+# pseudo bases pba and pbb in A.
+function __mul_pseudo_bases(A::AbsAlgAss{S}, pba::Vector{Tuple{AbsAlgAssElem{S}, T}}, pbb::Vector{Tuple{AbsAlgAssElem{S}, T}}) where { S, T }
+  d = dim(A)
   d2 = d^2
-  A = algebra(order(a))
 
   M = zero_matrix(base_ring(A), d2, d)
-  C = Array{frac_ideal_type(order_type(base_ring(A))), 1}(undef, d2)
+  C = Array{fractional_ideal_type(order_type(base_ring(A))), 1}(undef, d2)
   t = one(A)
   for i = 1:d
     i1d = (i - 1)*d
@@ -230,10 +235,62 @@ function *(a::AlgAssRelOrdIdl{S, T}, b::AlgAssRelOrdIdl{S, T}) where {S, T}
     end
   end
 
-  PM = PseudoMatrix(M, C)
+  return PseudoMatrix(M, C)
+end
+
+# The "usual" multiplication of integral ideals living in the same order.
+# Always returns an integral ideal in this order.
+function _mul_same_order(a::AlgAssRelOrdIdl{S, T}, b::AlgAssRelOrdIdl{S, T}) where { S, T }
+  if iszero(a)
+    return deepcopy(a)
+  elseif iszero(b)
+    return deepcopy(b)
+  end
+
+  A = algebra(order(a))
+  PM = __mul_pseudo_bases(A, pseudo_basis(a, copy = false), pseudo_basis(b, copy = false))
+
   PM.matrix = PM.matrix*basis_mat_inv(order(a), copy = false)
-  H = sub(pseudo_hnf(PM, :lowerleft), (d2 - d + 1):d2, 1:d)
+  H = sub(pseudo_hnf(PM, :lowerleft), (nrows(PM) - dim(A) + 1):nrows(PM), 1:dim(A))
   return ideal(order(a), H, :nothing, false, true)
+end
+
+# The multiplication of full lattices, the result may be an integral or fractional
+# ideal of left_order(a).
+# If return_type == :nothing, it is tested whether the product is integral and
+# the returned type is chosen accordingly.
+# If return_type == :integral or return_type == :fractional, then the result
+# is returned as integral resp. fractional ideal WITHOUT CHECKS!
+function _mul_full_lattice(a::AlgAssRelOrdIdl{S, T}, b::AlgAssRelOrdIdl{S, T}; return_type::Symbol = :nothing) where { S, T }
+  A = algebra(order(a))
+  PM = __mul_pseudo_bases(A, pseudo_basis(a, copy = false), pseudo_basis(b, copy = false))
+  O = left_order(a)
+  PM.matrix = PM.matrix*basis_mat_inv(O, copy = false)
+  H = sub(pseudo_hnf(PM, :lowerleft), (nrows(PM) - dim(A) + 1):nrows(PM), 1:dim(A))
+
+  isint = false
+  if return_type == :nothing
+    if defines_ideal(O, H)
+      isint = true
+    end
+  elseif return_type == :integral
+    isint = true
+  elseif return_type == :fractional
+    isint = false
+  else
+    error("Option :$(return_type) for return_type not implemented")
+  end
+  if isint
+    c = ideal(O, H, :left, false, true)
+  else
+    c = fractional_ideal(O, H, :left, true)
+  end
+
+  c.left_order = O
+  if isdefined(b, :right_order)
+    c.right_order = right_order(b)
+  end
+  return c
 end
 
 @doc Markdown.doc"""
@@ -248,9 +305,10 @@ end
 @doc Markdown.doc"""
     intersect(a::AlgAssRelOrdIdl, b::AlgAssRelOrdIdl) -> AlgAssRelOrdIdl
 
-> Returns $a \cap b$.
+> Returns $a \cap b$, requires `order(a) === order(b)`.
 """
 function intersect(a::AlgAssRelOrdIdl{S, T}, b::AlgAssRelOrdIdl{S, T}) where {S, T}
+  @assert order(a) === order(b)
   d = degree(order(a))
   Ma = basis_pmatrix(a)
   Mb = basis_pmatrix(b)
@@ -416,14 +474,14 @@ end
 > Returns the ideal $a \cdot O$ where $a$ is an ideal of `base_ring(O)`.
 """
 function ideal(O::AlgAssRelOrd{nf_elem, NfOrdFracIdl}, a::NfAbsOrdIdl)
-  aa = frac_ideal(order(a), a, fmpz(1))
+  aa = fractional_ideal(order(a), a, fmpz(1))
   return ideal(O, aa, false)
 end
 
 function ideal(O::AlgAssRelOrd, a::NfRelOrdIdl)
   @assert order(a) == order(pseudo_basis(O, copy = false)[1][2])
 
-  aa = frac_ideal(order(a), basis_pmatrix(a), true)
+  aa = fractional_ideal(order(a), basis_pmatrix(a), true)
   return ideal(O, aa, false)
 end
 
@@ -469,6 +527,22 @@ function ideal_from_lattice_gens(O::AlgAssRelOrd, gens::Vector{ <: AbsAlgAssElem
   return ideal(O, PM, :nothing, check, true)
 end
 
+function ideal(O::AlgAssRelOrd{S, T}, I::AlgAssRelOrdIdl{S, T}, check::Bool = true) where { S, T }
+  if O === order(I)
+    return deepcopy(I)
+  end
+  PM = basis_pmatrix(I)
+  PM.matrix = PM.matrix*basis_matrix(order(I), copy = false)*basis_mat_inv(O, copy = false)
+  J = ideal(O, PM, :nothing, check)
+  if isdefined(I, :left_order)
+    J.left_order = left_order(I)
+  end
+  if isdefined(I, :right_order)
+    J.right_order = right_order(I)
+  end
+  return J
+end
+
 ################################################################################
 #
 #  Inclusion of elements in ideals
@@ -502,10 +576,11 @@ end
 
 @doc Markdown.doc"""
     ==(a::AlgAssRelOrdIdl, b::AlgAssRelOrdIdl) -> Bool
+    ==(a::AlgAssRelOrdFracIdl, b::AlgAssRelOrdFracIdl) -> Bool
 
 > Returns `true` if $a$ and $b$ are equal and `false` otherwise.
 """
-function ==(A::AlgAssRelOrdIdl, B::AlgAssRelOrdIdl)
+function ==(A::T, B::T) where { T <: Union{ AlgAssRelOrdIdl, AlgAssRelOrdFracIdl } }
   order(A) !== order(B) && return false
   return basis_pmatrix(A, copy = false) == basis_pmatrix(B, copy = false)
 end
@@ -518,7 +593,7 @@ end
 
 # functions isright_ideal and isleft_ideal are in AlgAss/Ideal.jl
 
-function _test_ideal_sidedness(a::AlgAssRelOrdIdl, side::Symbol)
+function _test_ideal_sidedness(a::Union{ AlgAssRelOrdIdl, AlgAssRelOrdFracIdl }, side::Symbol)
   O = order(a)
   b = ideal(O, one(O))
 
@@ -533,55 +608,97 @@ function _test_ideal_sidedness(a::AlgAssRelOrdIdl, side::Symbol)
   return _spans_subset_of_pseudohnf(basis_pmatrix(c, copy = false), basis_pmatrix(a, copy = false), :lowerleft)
 end
 
+isleft_known(a::Union{ AlgAssRelOrdIdl, AlgAssRelOrdFracIdl }) = a.isleft != 0
+isright_known(a::Union{ AlgAssRelOrdIdl, AlgAssRelOrdFracIdl }) = a.isright != 0
+
 ################################################################################
 #
 #  Ring of multipliers, left and right order
 #
 ################################################################################
 
-function ring_of_multipliers(a::AlgAssRelOrdIdl{T1, T2}, action::Symbol = :left) where {T1, T2}
-  O = order(a)
-  K = base_ring(algebra(O))
-  d = degree(O)
-  pb = pseudo_basis(a, copy = false)
-  S = basis_mat_inv(O, copy = false)*basis_mat_inv(a, copy = false)
-  M = basis_matrix(O, copy = false)*representation_matrix(pb[1][1], action)*S
+# This computes a basis pseudo-matrix for \{ x \in A | bx \subseteq a \} if
+# side == :left or \{ x \in A | xb \subseteq a \} if side == :right.
+# The returned matrix is in the basis of the ALGEBRA and NOT of any order.
+# a and b need not have the same order, as they are treated as lattices in the
+# algebra.
+function _colon_raw(a::Union{ AlgAssRelOrdIdl{S, T}, AlgAssRelOrdFracIdl{S, T} }, b::Union{ AlgAssRelOrdIdl{S, T}, AlgAssRelOrdFracIdl{S, T} }, side::Symbol) where { S, T }
+  @assert isfull_lattice(a) && isfull_lattice(b)
+  A = algebra(order(a))
+  @assert A === algebra(order(b))
+  K = base_ring(A)
+  d = dim(A)
+  pba = pseudo_basis(a, copy = false)
+  pbb = pseudo_basis(b, copy = false)
+  B = basis_mat_inv(order(a), copy = false)*basis_mat_inv(a, copy = false)
+  M = representation_matrix(pbb[1][1], side)*B
   for i = 2:d
-    M = hcat(M, basis_matrix(O, copy = false)*representation_matrix(pb[i][1], action)*S)
+    M = hcat(M, representation_matrix(pbb[i][1], side)*B)
   end
-  invcoeffs = [ simplify(inv(pb[i][2])) for i = 1:d ]
-  C = Array{T2}(undef, d^2)
+  invcoeffs = [ simplify(inv(pba[i][2])) for i = 1:d ]
+  C = Array{T}(undef, d^2)
   for i = 1:d
     for j = 1:d
-      if i == j
-        C[(i - 1)*d + j] = K(1)*order(pb[i][2])
-      else
-        C[(i - 1)*d + j] = simplify(pb[i][2]*invcoeffs[j])
-      end
+      C[(i - 1)*d + j] = simplify(pbb[i][2]*invcoeffs[j])
     end
   end
   PM = PseudoMatrix(transpose(M), C)
   PM = sub(pseudo_hnf(PM, :upperright, true), 1:d, 1:d)
-  N = inv(transpose(PM.matrix))*basis_matrix(O, copy = false)
+  N = inv(transpose(PM.matrix))
   PN = PseudoMatrix(N, [ simplify(inv(I)) for I in PM.coeffs ])
-  return typeof(O)(algebra(O), PN)
+  return PN
+end
+
+function ring_of_multipliers(a::Union{ AlgAssRelOrdIdl, AlgAssRelOrdFracIdl }, action::Symbol = :left)
+  PM = _colon_raw(a, a, action)
+  return Order(algebra(order(a)), PM)
 end
 
 @doc Markdown.doc"""
     left_order(a::AlgAssRelOrdIdl) -> AlgAssRelOrd
+    left_order(a::AlgAssRelOrdFracIdl) -> AlgAssRelOrd
 
-> Returns the order $\{ x \in A \mid xa \subseteq a\}$, where $A$ is the algebra
-> containing $a$.
+> Returns the largest order of which $a$ is a left ideal, that is
+> $\{ x \in A \mid xa \subseteq a\}$.
 """
-left_order(a::AlgAssRelOrdIdl) = ring_of_multipliers(a, :right)
+function left_order(a::Union{ AlgAssRelOrdIdl, AlgAssRelOrdFracIdl })
+  if isdefined(a, :left_order)
+    return a.left_order
+  end
+
+  if ismaximal_known(order(a)) && ismaximal(order(a))
+    if isleft_ideal(a)
+      a.left_order = order(a)
+      return order(a)
+    end
+  end
+
+  a.left_order = ring_of_multipliers(a, :right)
+  return a.left_order
+end
 
 @doc Markdown.doc"""
     right_order(a::AlgAssRelOrdIdl) -> AlgAssRelOrd
+    right_order(a::AlgAssRelOrdFracIdl) -> AlgAssRelOrd
 
-> Returns the order $\{ x \in A \mid ax \subseteq a\}$, where $A$ is the algebra
-> containing $a$.
+> Returns the largest order of which $a$ is a right ideal, that is
+> $\{ x \in A \mid ax \subseteq a\}$.
 """
-right_order(a::AlgAssRelOrdIdl) = ring_of_multipliers(a, :left)
+function right_order(a::Union{ AlgAssRelOrdIdl, AlgAssRelOrdFracIdl })
+  if isdefined(a, :right_order)
+    return a.right_order
+  end
+
+  if ismaximal_known(order(a)) && ismaximal(order(a))
+    if isright_ideal(a)
+      a.right_order = order(a)
+      return order(a)
+    end
+  end
+
+  a.right_order = ring_of_multipliers(a, :left)
+  return a.right_order
+end
 
 ################################################################################
 #
@@ -700,8 +817,7 @@ end
 > It is assumed that the algebra containing $a$ is simple and central.
 """
 function normred(a::AlgAssRelOrdIdl; copy::Bool = true)
-  @assert dimension_of_center(algebra(order(a))) == 1
-  @assert algebra(order(a)).issimple == 1
+  @assert issimple(algebra(order(a))) && iscentral(algebra(order(a))) "Only implemented for simple and central algebras"
   assure_has_normred(a)
   if copy
     return deepcopy(a.normred)
@@ -720,7 +836,7 @@ end
     locally_free_basis(a::AlgAssRelOrdIdl, p::Union{ NfAbsOrdIdl, NfRelOrdIdl })
       -> AlgAssRelOrdElem
 
-> Returns an element $x$ of the order $O$ of $a$ such that $a_p = O_p \cdot b$
+> Returns an element $x$ of the order $O$ of $a$ such that $a_p = O_p \cdot x$
 > where $p$ is a prime ideal of `base_ring(O)`.
 > See also `islocally_free`.
 """
@@ -922,6 +1038,185 @@ end
 
 ################################################################################
 #
+#  Maximal integral ideals
+#
+################################################################################
+
+# Computes any maximal integral ideal with left order O (if side = :left) or
+# right order O (if side = :right) which contains p.
+# Assumes (so far?) that the algebra is simple and O is maximal.
+function maximal_integral_ideal(O::AlgAssRelOrd, p::Union{ NfAbsOrdIdl, NfRelOrdIdl }, side::Symbol)
+  A = algebra(O)
+  @assert issimple(A)
+  @assert ismaximal(O)
+
+  K = base_ring(algebra(O))
+  OK = base_ring(O)
+
+  P = pradical(O, p) # if the algebra is simple, then the pradical is the unique prime lying over p
+
+  # P is the Jacobson radical of O/pO, so O/P is a simple algebra
+  B, OtoB = quo(O, P, p)
+  C, BtoC, CtoB = _as_algebra_over_center(B)
+  D, CtoD = _as_matrix_algebra(C)
+
+  n = degree(D)
+  N = basis_pmatrix(P)
+  m = numerator(det(N), copy = false)
+  t = zero_matrix(K, 1, degree(O))
+  # Now we only need to lift a basis for diag(1, ..., 1, 0)*D (side = :left) or
+  # D*diag(1, ..., 1, 0) (side = :right) since these are maximal ideals of D.
+  if side == :left
+    jMax = n - 1
+    iMax = n
+  elseif side == :right
+    jMax = n
+    iMax = n - 1
+  else
+    error("Option :$(side) for side not implemented")
+  end
+  for j = 1:jMax
+    jn = (j - 1)*n
+    for i = 1:iMax
+      b = (OtoB\(CtoB(CtoD\D[jn + i])))
+      for k = 1:degree(O)
+        t[1, k] = coordinates(b, copy = false)[k]
+      end
+      N = vcat(N, PseudoMatrix(deepcopy(t), [ K(1)*OK ]))
+    end
+  end
+  N = sub(pseudo_hnf_full_rank_with_modulus(N, m, :lowerleft), nrows(N) - degree(O) + 1:nrows(N), 1:degree(O))
+
+  M = ideal(O, N, side, false, true)
+  if side == :left
+    M.left_order = O # O is maximal
+  else
+    M.right_order = O
+  end
+  return M
+end
+
+# Constructs a maximal integral ideal M of O := order(I) such that M\cap R = p
+# and I\subseteq M.
+# M is a left ideal of O if side = :left and a right ideal if side = :right.
+# Assumes (so far?) that the algebra is simple and O is maximal.
+function maximal_integral_ideal_containing(I::AlgAssRelOrdIdl, p::Union{ NfAbsOrdIdl, NfRelOrdIdl }, side::Symbol)
+  O = order(I)
+  if side == :left
+    @assert isleft_ideal(I)
+  elseif side == :right
+    @assert isright_ideal(I)
+  else
+    error("Option :$(side) for side not implemented")
+  end
+
+  @assert issimple(algebra(O))
+  @assert ismaximal(O)
+
+  n = normred(I)
+  if valuation(n, p) == 0
+    error("Cannot find a maximal ideal for the given prime")
+  end
+  if n == p
+    return I
+  end
+
+  P = prime_ideals_over(O, p)[1]
+  J = I + P
+  if normred(J) == p
+    return J
+  end
+
+  OP, toOP = quo(O, P, p)
+  B, OPtoB, BtoOP = _as_algebra_over_center(OP)
+  C, toC = _as_matrix_algebra(B)
+
+  JinC = ideal_from_gens(C, [ toC(BtoOP(toOP(b))) for b in z_basis(J) ])
+  y = left_principal_gen(JinC)
+  m = matrix(y)
+  r = rref!(m)
+  k = degree(C)
+  @assert r < k - 1 # Otherwise J would be maximal, which we have checked...
+
+  # We need to "add" pivots to m to get rank k - 1
+  row = 1
+  col = 1
+  while r < k - 1
+    if !iszero(m[row, col])
+      row += 1
+      continue
+    end
+
+    r += 1
+    m[r, col] = 1
+    col += 1
+  end
+  @assert rank(m) == k - 1
+  if side == :left
+    c = C*C(m)
+  else
+    c = C(m)*C
+  end
+  basis_c = basis(c, copy = false)
+
+  t = zero_matrix(base_ring(algebra(O)), length(basis_c), degree(O))
+  for i = 1:length(basis_c)
+    b = toOP\(BtoOP(toC\(basis_c[i])))
+    for j = 1:degree(O)
+      t[i, j] = coordinates(b, copy = false)[j]
+    end
+  end
+  PM = vcat(basis_pmat(P), PseudoMatrix(t))
+  n = numerator(det(basis_pmat(P, copy = false)), copy = false)
+  PM = sub(pseudo_hnf_full_rank_with_modulus(PM, n, :lowerleft), length(basis_c) + 1:nrows(PM), 1:ncols(PM))
+
+  M = ideal(O, PM, side, false, true)
+  @assert normred(M) == p
+  if side == :left
+    M.left_order = O # O is maximal
+  else
+    M.right_order = O
+  end
+
+  return M
+end
+
+################################################################################
+#
+#  Factorization into maximal ideals
+#
+################################################################################
+
+# Computes maximal integral ideals M_1, ..., M_k such that I = M_1\cdots M_k,
+# and such that the right order of any factor is the left order of the next
+# factor.
+# Always considers I as an ideal of its left order.
+function factor(I::AlgAssRelOrdIdl)
+  O = left_order(I)
+  @assert ismaximal(O)
+  J = ideal(O, I)
+  J.isleft = true
+
+  factors = Vector{ideal_type(O)}()
+  n = normred(J)
+  fac_n = factor(n)
+  primes = collect(keys(fac_n))
+  sort!(primes, lt = (p, q) -> minimum(p, copy = false) < minimum(q, copy = false))
+  fac_n[primes[end]] -= 1 # We don't need to find the "last" maximal ideal
+  for p in primes
+    for i = 1:fac_n[p]
+      M = maximal_integral_ideal_containing(J, p, :left)
+      push!(factors, M)
+      J = divexact_left(J, M, set_order = :right_b)
+    end
+  end
+  push!(factors, J)
+
+  return factors
+end
+
+################################################################################
+#
 #  Random elements
 #
 ################################################################################
@@ -939,4 +1234,50 @@ function rand(a::AlgAssRelOrdIdl, B::Int)
     z += t*pb[i][1]
   end
   return order(a)(z)
+end
+
+################################################################################
+#
+#  Coprime representative
+#
+################################################################################
+
+# Returns x \in A with Ix + a*O == O and Ix \subseteq O.
+# a should be an ideal of base_ring(O).
+function integral_coprime_representative(O::AlgAssRelOrd, I::AlgAssRelOrdIdl, a::Union{ NfAbsOrdIdl, NfRelOrdIdl })
+  A = algebra(O)
+  if one(O) in I + a*O
+    return one(A)
+  end
+
+  fac_a = factor(a)
+  primes = collect(keys(fac_a))
+
+  x = A()
+  vals = ones(Int, length(primes))
+  for i = 1:length(primes)
+    p = primes[i]
+    vals[i] = 0
+    z = approximate_nonnegative(vals, primes)
+    vals[i] = 1
+    if one(O) in I + p*O
+      # I is already coprime to this prime
+      x += A(elem_in_nf(z, copy = false))
+      continue
+    end
+    b, g = islocally_free(I, p)
+    @assert b "No local generator found for $p"
+    ig = inv(elem_in_algebra(g, copy = false))
+    Ig = I*ig
+    y = coprime_denominator(O, Ig, p)
+    x += ig*elem_in_nf(y, copy = false)*elem_in_nf(z, copy = false)
+  end
+  return x
+end
+
+function integral_coprime_representative(O::AlgAssRelOrd, I::AlgAssRelOrdFracIdl, a::Union{ NfAbsOrdIdl, NfRelOrdIdl })
+  A = algebra(O)
+  d = denominator(I, copy = false)
+  J = numerator(I)
+  return d*integral_coprime_representative(O, J, a)
 end

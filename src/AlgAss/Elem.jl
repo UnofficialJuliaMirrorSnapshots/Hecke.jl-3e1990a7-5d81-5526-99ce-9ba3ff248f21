@@ -646,7 +646,7 @@ end
 
 function _reduced_charpoly_simple(a::AbsAlgAssElem, R::PolyRing)
   A = parent(a)
-  @assert issimple_known(A) && A.issimple == 1
+  @assert issimple(A)
 
   M = representation_matrix(a)
   f = charpoly(R, M)
@@ -909,6 +909,16 @@ function normred_over_center(a::AbsAlgAssElem, ZtoA::AbsAlgAssMor)
     t, n2 = haspreimage(ZtoA, BtoA(ZtoB(n1)))
     @assert t
     n += n2
+  end
+  return n
+end
+
+function normred(x::FacElem{S, T}) where { S <: AbsAlgAssElem, T <: AbsAlgAss }
+  K = base_ring(base_ring(parent(x)))
+  @assert iscommutative(K) # so, it doesn't matter in which order we compute the norms
+  n = one(K)
+  for (b, e) in x.fac
+    n *= normred(b)^e
   end
   return n
 end
