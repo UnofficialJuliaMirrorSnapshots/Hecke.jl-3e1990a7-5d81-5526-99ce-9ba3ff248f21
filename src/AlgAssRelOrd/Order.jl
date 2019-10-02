@@ -8,10 +8,6 @@ ideal_type(::AlgAssRelOrd{S, T}) where {S, T} = AlgAssRelOrdIdl{S, T}
 
 ideal_type(::Type{AlgAssRelOrd{S, T}}) where {S, T} = AlgAssRelOrdIdl{S, T}
 
-fractional_ideal_type(::AlgAssRelOrd{S, T}) where {S, T} = AlgAssRelOrdFracIdl{S, T}
-
-fractional_ideal_type(::Type{AlgAssRelOrd{S, T}}) where {S, T} = AlgAssRelOrdFracIdl{S, T}
-
 @doc Markdown.doc"""
     algebra(O::AlgAssRelOrd) -> AbsAlgAss
 
@@ -189,7 +185,7 @@ function inv_coeff_ideals(O::AlgAssRelOrd; copy::Bool = true)
 end
 
 # Returns a basis of O as Z-module
-function z_basis(O::Union{ NfRelOrd, AlgAssRelOrd })
+function absolute_basis(O::Union{ NfRelOrd, AlgAssRelOrd })
   pb = pseudo_basis(O, copy = false)
   res = Vector{elem_type(_algebra(O))}()
   for i = 1:degree(O)
