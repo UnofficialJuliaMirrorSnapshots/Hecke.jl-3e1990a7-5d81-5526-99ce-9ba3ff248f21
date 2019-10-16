@@ -219,6 +219,9 @@ function ideal(O::NfOrd, v::Vector{NfOrdElem})
   if isempty(v)
     return ideal(O, 0)
   end
+  for i = 1:length(v)
+    @assert O === parent(v[i])
+  end
   M = zero_matrix(FlintZZ, 2*degree(O), degree(O))
   M1 = representation_matrix(v[1])
   _hnf!(M1, :lowerleft)
@@ -284,10 +287,12 @@ end
 Creates the ideal $(x, y)$ of $\mathcal O$.
 """
 function ideal(O::NfAbsOrd, x::fmpz, y::NfOrdElem)
+  @assert parent(y) === O
   return NfAbsOrdIdl(deepcopy(x), deepcopy(y))
 end
 
 function ideal(O::NfAbsOrd, x::Integer, y::NfOrdElem)
+  @assert parent(y) === O
   return NfAbsOrdIdl(fmpz(x), deepcopy(y))
 end
 
@@ -310,6 +315,9 @@ ideal(O::NfAbsOrd, a::Int) = NfAbsOrdIdl(O, a)
 ideal(O::NfAbsOrd, a::Integer) = NfAbsOrdIdl(O, fmpz(a))
 
 function ideal_from_z_gens(O::NfOrd, b::Vector{NfOrdElem}, check::Bool = false)
+  for i = 1:length(b)
+    @assert parent(b[i]) === O
+  end
   d = degree(O)
   @assert length(b) >= d
 
@@ -1668,7 +1676,7 @@ function mod(x::FacElem{S, T}, Q::AbsOrdQuoRing{NfAbsOrd{T, S}, NfAbsOrdIdl{T, S
       end
       b = bases[j]*val_elt^v
       bases[j] = O(b)
-      n += v*exps[j]
+      n -= v*exps[j]
     end
     if iszero(n)
       continue
@@ -1683,14 +1691,27 @@ function mod(x::FacElem{S, T}, Q::AbsOrdQuoRing{NfAbsOrd{T, S}, NfAbsOrdIdl{T, S
       if iszero(v)
         continue
       end
-      b = bases[j]*val_elt^v
-      bases[j] = O(b)
-      n += v*exps[j]
-      if n >= 0
+      n2 = n - v*exps[j]
+      if n2 >= 0
+        b = bases[j]*val_elt^v
+        bases[j] = O(b)
+        n = n2
+        if n == 0
+          break
+        end
+      else
+        q, r = divrem(n, exps[j])
+        @assert q < v
+        b = bases[j]
+        push!(bases, O(b*val_elt^q))
+        push!(exps, exps[j] - r)
+        bases[j] = O(b*val_elt^(q + 1))
+        exps[j] = r
+        n = 0
         break
       end
     end
-    @assert n >= 0 "Element not integral"
+    @assert n == 0 "Element not integral"
   end
 
   # Now we can evaluate (modulo ideal(Q) of course)
@@ -2055,7 +2076,7 @@ function iscoprime(I::NfAbsOrdIdl, J::NfAbsOrdIdl)
       return true
     end
   end
-  if gcd(minimum(I), minimum(J)) == 1
+  if gcd(minimum(I, copy = false), minimum(J, copy = false)) == 1
     return true
   else 
     return isone(I+J)
