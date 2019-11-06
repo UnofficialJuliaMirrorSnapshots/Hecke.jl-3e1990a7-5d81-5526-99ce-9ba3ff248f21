@@ -362,7 +362,8 @@ function compute_fields(class_fields::Vector{Hecke.ClassField{Hecke.MapRayClassG
   @vprint :Fields 3 "Computing the fields directly\n"
   for i in it
     C = class_fields[i]
-    L = NumberField(C)#_using_Brauer(C)
+    L = NumberField(C)
+    #L = NumberField_using_Brauer(C)
     autL = Hecke.absolute_automorphism_group(C, autos)
     if !isone(gcd(degree(K), expo)) 
       Cpperm = permutation_group(autL)
@@ -439,6 +440,7 @@ function set_up_cycl_ext(K::AnticNumberField, n::Int, autK::Array{NfToNfMor, 1})
     @vprint :FieldsNonFancy 1 "computing class group of cyclotomic extension of order $e\n"
     Cl, mCl = class_group(maximal_order(C.Ka), use_aut = true)
     Hecke.allow_cache!(mCl)
+    @vprint :Fields 1 "$(Hecke.set_cursor_col())$(Hecke.clear_to_eol())"
   end
   return nothing
 
@@ -610,11 +612,20 @@ function translate_extensions(mL::NfToNfMor, class_fields, new_class_fields, ctx
           fm0[p] = max(v, fm0[p]) 
         end
       end
+      lPP = prime_decomposition(mL, p)
+      for (P, vP) in lPP
+        if haskey(fM0, P)
+          fM0[P] = max(fM0[P], 2*vP*fm0[p])
+        else
+          fM0[P] = vP*fm0[p]*2
+        end
+      end
     end
     infplc = InfPlc[]
     if iszero(mod(n, 2)) 
       infplc = real_places(L)
     end
+    
     @vprint :Fields 3 "Checking if I can compute $(indclf) over a subfield\n\n "
     @vtime :Fields 3 r, mr = Hecke.ray_class_group_quo(OL, fm0, infplc, ctx, check = false)
     if exponent(r) < n || order(r) < degree(C)
